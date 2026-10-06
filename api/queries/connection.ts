@@ -57,7 +57,58 @@ function openDatabase(): DatabaseSync {
     db.exec('ALTER TABLE docs ADD COLUMN savedAt INTEGER')
   }
 
+  // One-off data migrations, recorded so they never run twice.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      name TEXT PRIMARY KEY,
+      runAt INTEGER NOT NULL
+    );
+  `)
+  runMigrations(db)
+
   return db
+}
+
+/**
+ * Backfill `savedAt` for articles written before 草稿箱 existed.
+ *
+ * `savedAt` was added later, so every article from the first release has NULL
+ * there. NULL means "working copy, not archived", which is why those articles
+ * never showed up in 草稿箱 — the owner saw them in the editor but found an
+ * empty archive, and would have lost them with the browser cache. Stamping them
+ * with `savedAt = updatedAt` puts them back in the archive.
+ *
+ * The cut-off is the moment this migration first runs: only rows that already
+ * existed are backfilled, so a brand-new working copy created afterwards still
+ * stays out of 草稿箱 until the owner saves it.
+ *
+ * Timestamp columns with `mode: 'timestamp'` hold *seconds*, so the cut-off is
+ * seconds too. Comparing against Date.now() would be off by a factor of 1000
+ * and pull in every row, including fresh working copies.
+ */
+export const SAVEDAT_BACKFILL = 'backfill-savedAt-from-pre-drafts-articles'
+
+export function backfillSavedAt(db: DatabaseSync, cutoffSeconds = Math.floor(Date.now() / 1000)): number {
+  const result = db
+    .prepare(
+      `UPDATE docs SET savedAt = updatedAt
+       WHERE savedAt IS NULL AND updatedAt < ?`,
+    )
+    .run(cutoffSeconds)
+  return Number(result.changes)
+}
+
+export function runMigrations(db: DatabaseSync, cutoffSeconds = Math.floor(Date.now() / 1000)): number {
+  const done = db.prepare('SELECT name FROM _migrations WHERE name = ?').get(SAVEDAT_BACKFILL)
+  if (done) return 0
+
+  const changed = backfillSavedAt(db, cutoffSeconds)
+  db.prepare('INSERT INTO _migrations (name, runAt) VALUES (?, ?)').run(SAVEDAT_BACKFILL, cutoffSeconds)
+
+  if (changed > 0) {
+    console.log(`[migrate] archived ${changed} article(s) written before the drafts box existed`)
+  }
+  return changed
 }
 
 let instance: ReturnType<typeof drizzle<typeof schema>>
