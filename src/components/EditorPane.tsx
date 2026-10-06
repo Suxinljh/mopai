@@ -213,76 +213,77 @@ function buildDeco(view: EditorView): DecorationSet {
   return Decoration.set(marks.map((m) => m.deco.range(m.from, m.to)))
 }
 
+// yoru (夜) 色系：深子夜靛蓝井 + 提亮的靛蓝主色
 const editorTheme = EditorView.theme(
   {
     '&': {
-      backgroundColor: '#14161B',
-      color: '#D8DCE3',
+      backgroundColor: '#0B1020',
+      color: '#E6EAF6',
       height: '100%',
       fontSize: '13.5px',
     },
     '.cm-content': {
-      fontFamily: 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
+      fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
       padding: '16px 0',
-      caretColor: '#1677FF',
+      caretColor: '#7A95FA',
       lineHeight: '1.75',
     },
-    '.cm-cursor': { borderLeftColor: '#1677FF', borderLeftWidth: '2px' },
+    '.cm-cursor': { borderLeftColor: '#7A95FA', borderLeftWidth: '2px' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: 'rgba(22,119,255,.22) !important',
+      backgroundColor: 'rgba(122,149,250,.22) !important',
     },
     '.cm-gutters': {
-      backgroundColor: '#14161B',
-      color: '#3D434F',
+      backgroundColor: '#0B1020',
+      color: '#434D67',
       border: 'none',
       paddingLeft: '8px',
     },
     '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,.035)' },
-    '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#6B7285' },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#6B7691' },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': { overflow: 'auto' },
     // 自动补全弹层（跟随暗色编辑器，不用 CodeMirror 默认的浅色）
     '.cm-tooltip': {
-      backgroundColor: '#1B1E25',
-      border: '1px solid rgba(255,255,255,.12)',
-      borderRadius: '8px',
-      boxShadow: '0 12px 32px rgba(0,0,0,.45)',
+      backgroundColor: '#1B2340',
+      border: '1px solid rgba(255,255,255,.10)',
+      borderRadius: '12px',
+      boxShadow: '0 14px 36px -10px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.4)',
       overflow: 'hidden',
     },
     '.cm-tooltip-autocomplete ul': { fontFamily: 'inherit', maxHeight: '260px' },
     '.cm-tooltip-autocomplete ul li': {
       padding: '4px 8px',
-      color: '#D8DCE3',
+      color: '#E6EAF6',
       fontSize: '12.5px',
       lineHeight: '1.5',
     },
     '.cm-tooltip-autocomplete ul li[aria-selected]': {
-      backgroundColor: 'rgba(22,119,255,.28)',
+      backgroundColor: 'rgba(122,149,250,.28)',
       color: '#FFFFFF',
     },
-    '.cm-completionLabel': { fontFamily: 'ui-monospace, Menlo, Consolas, monospace' },
+    '.cm-completionLabel': { fontFamily: '"Geist Mono", ui-monospace, Menlo, Consolas, monospace' },
     '.cm-completionDetail': {
-      color: '#8A919E',
+      color: '#6B7691',
       fontStyle: 'normal',
       marginLeft: '10px',
       fontSize: '11px',
     },
-    '.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail': { color: '#C9D4E4' },
-    '.cm-completionMatchedText': { textDecoration: 'none', color: '#7DB4FF', fontWeight: '700' },
+    '.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail': { color: '#A8B2CC' },
+    '.cm-completionMatchedText': { textDecoration: 'none', color: '#93A9FB', fontWeight: '700' },
   },
   { dark: true },
 )
 
 const mdHighlight = HighlightStyle.define([
-  { tag: tags.heading, color: '#7DB4FF', fontWeight: '700' },
+  { tag: tags.heading, color: '#93A9FB', fontWeight: '700' },
   { tag: tags.strong, color: '#FFFFFF', fontWeight: '700' },
-  { tag: tags.emphasis, color: '#E5C07B' },
-  { tag: tags.strikethrough, color: '#7C818C', textDecoration: 'line-through' },
-  { tag: tags.monospace, color: '#98C379' },
+  { tag: tags.emphasis, color: '#ECB85F' },
+  { tag: tags.strikethrough, color: '#6B7691', textDecoration: 'line-through' },
+  { tag: tags.monospace, color: '#38C8C0' },
   { tag: tags.quote, color: '#8FBCA5' },
-  { tag: tags.link, color: '#61AFEF' },
-  { tag: tags.processingInstruction, color: '#5C6370' },
-  { tag: tags.list, color: '#D8DCE3' },
+  { tag: tags.link, color: '#93A9FB' },
+  { tag: tags.processingInstruction, color: '#434D67' },
+  { tag: tags.list, color: '#E6EAF6' },
 ])
 
 interface Props {

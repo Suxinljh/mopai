@@ -52,7 +52,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
               </>
             ) : locked ? (
               <>
-                这个轮播已经定死 <strong className="text-[#111]">{ratio}</strong>。轮播内所有图片必须同比例，
+                这个轮播已经定死 <strong className="text-[#0E1525]">{ratio}</strong>。轮播内所有图片必须同比例，
                 换比例请先在正文里改 <code className="rounded bg-black/5 px-1">:::carousel</code> 那一行。
               </>
             ) : (
@@ -65,7 +65,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
         </DialogHeader>
 
         <div className="mt-1">
-          <p className="mb-2 text-[11px] text-[#9A9A9A]">
+          <p className="mb-2 text-[11px] text-[#6B7793]" style={{ fontFamily: 'var(--font-mono)' }}>
             {label} · {alt || '未命名'}
           </p>
 
@@ -73,14 +73,14 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
             <button
               type="button"
               onClick={() => setRatio(null)}
-              className={`mb-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${
-                ratio === null ? 'border-[#1677FF] bg-[#1677FF]/5 ring-1 ring-[#1677FF]/25' : 'border-black/8 hover:border-black/20'
+              className={`mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
+                ratio === null ? 'ya-selected bg-[#EFF2F8]' : 'hover:bg-[#F1F4FB]'
               }`}
             >
-              <span className={`text-[12px] ${ratio === null ? 'font-semibold text-[#1677FF]' : 'text-[#555]'}`}>
+              <span className={`text-[12px] ${ratio === null ? 'font-semibold text-[#4F6CE8]' : 'text-[#394560]'}`}>
                 保持原图比例，不裁
               </span>
-              <span className="ml-auto text-[11px] text-[#9A9A9A]">推荐</span>
+              <span className="ml-auto text-[11px] text-[#6B7793]">推荐</span>
             </button>
           )}
 
@@ -95,15 +95,15 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
                   disabled={locked}
                   onClick={() => setRatio(r)}
                   title={`${r} → 裁成 ${f.cropWidth}×${f.cropHeight}`}
-                  className={`flex flex-col items-center gap-1.5 rounded-lg border px-1 py-2 transition-all ${
-                    active ? 'border-[#1677FF] bg-[#1677FF]/5 ring-1 ring-[#1677FF]/25' : 'border-black/8 hover:border-black/20'
+                  className={`flex flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-all ${
+                    active ? 'ya-selected bg-[#EFF2F8]' : 'hover:bg-[#F1F4FB]'
                   } ${locked && !active ? 'opacity-40' : ''} disabled:cursor-not-allowed`}
                 >
                   <span
-                    className={`block rounded-sm border ${active ? 'border-[#1677FF] bg-[#1677FF]/12' : 'border-black/20 bg-black/4'}`}
+                    className={`block rounded-sm border ${active ? 'border-[#4F6CE8] bg-[#4F6CE8]/12' : 'border-black/20 bg-black/4'}`}
                     style={{ width: `${(f.width / 240) * 26}px`, height: `${(f.height / 240) * 26}px` }}
                   />
-                  <span className={`text-[11px] tabular-nums ${active ? 'font-semibold text-[#1677FF]' : 'text-[#555]'}`}>
+                  <span className={`text-[11px] tabular-nums ${active ? 'font-semibold text-[#4F6CE8]' : 'text-[#394560]'}`}>
                     {r}
                   </span>
                 </button>
@@ -111,7 +111,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
             })}
           </div>
 
-          <p className="mt-3 text-[11px] leading-relaxed text-[#9A9A9A]">
+          <p className="mt-3 text-[11px] leading-relaxed text-[#6B7793]">
             {preview
               ? `自动居中裁切，尺寸 ${preview.cropWidth}×${preview.cropHeight}。`
               : '原图按自身尺寸上传，正文里按容器宽度自适应。'}
@@ -120,22 +120,22 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
           <button
             type="button"
             onClick={onManual}
-            className="mt-2 flex w-full items-center justify-between rounded-lg border border-dashed border-black/15 px-3 py-2 text-left transition-colors hover:border-[#1677FF]/50 hover:bg-[#1677FF]/4"
+            className="mt-2 flex w-full items-center justify-between rounded-xl border border-dashed border-black/15 px-3 py-2 text-left transition-colors hover:border-[#4F6CE8]/50 hover:bg-[#4F6CE8]/5"
           >
-            <span className="text-[12px] text-[#333]">手动裁切</span>
-            <span className="text-[11px] text-[#9A9A9A]">
+            <span className="text-[12px] text-[#0E1525]">手动裁切</span>
+            <span className="text-[11px] text-[#6B7793]">
               {locked ? `比例锁 ${ratio}，自己拖决定留哪一块 →` : '自己拖，决定留哪一块 →'}
             </span>
           </button>
         </div>
 
         {/* Sticky so the actions stay reachable when the dialog scrolls on a short window. */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex justify-end gap-2 border-t border-black/8 bg-white px-6 py-3">
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex justify-end gap-2 border-t border-black/6 bg-[#F6F8FC] px-6 py-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-lg border border-black/8 px-3 py-1.5 text-[13px] text-[#555] transition-colors hover:border-black/20 disabled:opacity-50"
+            className="ya-btn ya-btn-secondary"
           >
             取消
           </button>
@@ -143,7 +143,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
             type="button"
             onClick={() => onConfirm(ratio)}
             disabled={busy}
-            className="rounded-lg bg-[#111] px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-black disabled:opacity-50"
+            className="ya-btn ya-btn-primary"
           >
             {busy ? '处理中…' : ratio ? '按这个比例上传' : '原样上传'}
           </button>

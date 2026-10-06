@@ -139,19 +139,19 @@ export default function Drafts() {
   }
 
   if (authLoading) {
-    return <Shell onBack={() => navigate('/')} count={null}><p className="text-[13px] text-[#9A9A9A]">读取中…</p></Shell>
+    return <Shell onBack={() => navigate('/')} count={null}><p className="text-[13px] text-[#6B7793]">读取中…</p></Shell>
   }
 
   if (!isAuthenticated) {
     return (
       <Shell onBack={() => navigate('/')} count={null}>
-        <div className="rounded-xl border border-black/8 bg-white p-6">
-          <p className="text-[13px] leading-relaxed text-[#333]">
+        <div className="ya-card p-6">
+          <p className="text-[13px] leading-relaxed text-[#394560]">
             草稿箱需要登录——稿件是跟着账号存的，这样换设备也能打开。
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="mt-4 rounded-lg bg-[#111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-black"
+            className="ya-btn ya-btn-primary mt-4"
           >
             去登录
           </button>
@@ -167,57 +167,57 @@ export default function Drafts() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜标题或正文…"
-          className="min-w-0 flex-1 rounded-lg border border-black/8 bg-white px-3 py-2 text-[13px] text-[#111] outline-none placeholder:text-black/25 focus:border-[#1677FF]/40"
+          className="ya-input min-w-0 flex-1"
         />
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           title="按什么排序"
-          className="shrink-0 rounded-lg border border-black/8 bg-white px-2.5 py-2 text-[13px] text-[#333] outline-none focus:border-[#1677FF]/40"
+          className="ya-input shrink-0 cursor-pointer appearance-none !w-auto pr-8"
         >
           <option value="savedAt">最近保存</option>
           <option value="chars">字数最多</option>
           <option value="images">图片最多</option>
         </select>
-        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-black/8 bg-white px-3 py-2 text-[13px] text-[#333]">
+        <label className="ya-btn-ghost ya-btn shrink-0 cursor-pointer !gap-1.5">
           <input
             type="checkbox"
             checked={onlyWithImages}
             onChange={(e) => setOnlyWithImages(e.target.checked)}
-            className="h-3.5 w-3.5"
+            className="h-3.5 w-3.5 accent-[#4F6CE8]"
           />
           只看有图
         </label>
         <button
           onClick={() => navigate('/')}
-          className="shrink-0 rounded-lg bg-[#111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-black"
+          className="ya-btn ya-btn-primary shrink-0"
         >
           新建一篇
         </button>
       </div>
 
       {draftsQuery.isLoading ? (
-        <p className="text-[13px] text-[#9A9A9A]">读取中…</p>
+        <p className="text-[13px] text-[#6B7793]">读取中…</p>
       ) : cards.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-black/12 bg-white p-8 text-center">
-          <p className="text-[13px] font-medium text-[#333]">草稿箱还是空的</p>
-          <p className="mt-2 text-[12px] leading-relaxed text-[#9A9A9A]">
+        <div className="ya-well p-8 text-center">
+          <p className="text-[13px] font-medium text-[#394560]">草稿箱还是空的</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#6B7793]">
             在编辑器里写完一篇，点顶栏的「保存到草稿箱」，它就会出现在这里。<br />
             编辑过程中的自动保存不会往这里塞东西。
           </p>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="rounded-xl border border-black/8 bg-white p-6 text-[13px] text-[#9A9A9A]">
+        <p className="ya-card p-6 text-[13px] text-[#6B7793]">
           没有匹配「{query}」的稿件。
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {filtered.map((c) => (
-            <li key={c.id} className="rounded-xl border border-black/8 bg-white p-4 transition-colors hover:border-black/16">
+            <li key={c.id} className="ya-card ya-card-hover p-4">
               <div className="flex items-start gap-3">
                 <button onClick={() => openDraft(c)} className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-[14px] font-semibold text-[#111]">{c.name || '未命名稿件'}</p>
-                  <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#9A9A9A]">
+                  <p className="truncate text-[14px] font-semibold text-[#0E1525]">{c.name || '未命名稿件'}</p>
+                  <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#6B7793]" style={{ fontFamily: 'var(--font-mono)' }}>
                     <span>保存于 {formatDate(c.savedAt)}</span>
                     <span className="text-black/15">·</span>
                     <span>{c.chars} 字</span>
@@ -231,7 +231,7 @@ export default function Drafts() {
                     )}
                   </p>
                   {c.headings.length > 0 && (
-                    <p className="mt-2 truncate text-[12px] text-[#707070]">
+                    <p className="mt-2 truncate text-[12px] text-[#394560]">
                       {c.headings.join(' / ')}
                     </p>
                   )}
@@ -239,19 +239,19 @@ export default function Drafts() {
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <button
                     onClick={() => openDraft(c)}
-                    className="rounded-md border border-black/10 px-2.5 py-1 text-[11px] text-[#333] transition-colors hover:border-black/25"
+                    className="ya-btn-secondary ya-btn ya-btn-sm"
                   >
                     打开
                   </button>
                   <button
                     onClick={() => void copyBody(c)}
-                    className="rounded-md px-2.5 py-1 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/4 hover:text-[#111]"
+                    className="ya-link-btn"
                   >
                     {copiedId === c.id ? '已复制' : '复制 md'}
                   </button>
                   <button
                     onClick={() => deleteDraft(c)}
-                    className="rounded-md px-2.5 py-1 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/4 hover:text-[#D93F3F]"
+                    className="ya-link-btn danger"
                   >
                     删除
                   </button>
@@ -261,7 +261,7 @@ export default function Drafts() {
           ))}
         </ul>
       )}
-      <Toaster position="bottom-center" toastOptions={{ style: { borderRadius: 10 } }} />
+      <Toaster position="bottom-center" />
     </Shell>
   )
 }
@@ -276,18 +276,18 @@ function Shell({
   count: number | null
 }) {
   return (
-    <div className="min-h-screen bg-[#F7F7F9] text-[#111]">
-      <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-black/8 bg-white/85 px-4 backdrop-blur-md">
+    <div className="ya-page min-h-screen">
+      <header className="ya-glass sticky top-0 z-10 flex h-14 items-center gap-3 px-4">
         <button
           onClick={onBack}
-          className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
+          className="ya-btn-secondary ya-btn ya-btn-sm !h-8"
         >
           ← 回到编辑器
         </button>
         <div className="flex items-baseline gap-2">
-          <span className="text-[15px] font-bold tracking-wide text-[#111]">草稿箱</span>
-          <span className="text-[10px] uppercase tracking-[0.18em] text-[#9A9A9A]">Drafts</span>
-          {count !== null && <span className="text-[12px] text-[#9A9A9A]">{count} 篇</span>}
+          <span className="text-[15px] font-bold tracking-wide text-[#0E1525]">草稿箱</span>
+          <span className="ya-eyebrow">drafts</span>
+          {count !== null && <span className="text-[12px] text-[#6B7793]" style={{ fontFamily: 'var(--font-mono)' }}>{count} 篇</span>}
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">{children}</main>

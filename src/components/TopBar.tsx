@@ -40,17 +40,17 @@ interface Props {
 }
 
 const THEME_DOT: Record<string, string> = {
-  golden: '#1677FF',
-  minimal: '#111111',
-  steady: '#1F4E8C',
+  golden: '#4F6CE8',
+  minimal: '#0E1525',
+  steady: '#1EA8A0',
 }
 
-const SYNC_LABEL: Record<Props['syncState'], { text: string; className: string; title: string }> = {
-  loading: { text: '读取中', className: 'text-[#9A9A9A]', title: '正在从云端读取稿件' },
-  saving: { text: '保存中', className: 'text-[#1677FF]', title: '正在写入草稿箱' },
-  synced: { text: '已保存', className: 'text-emerald-600', title: '这篇已经在草稿箱里了' },
-  local: { text: '仅本机', className: 'text-amber-600', title: '未登录：内容只存在这个浏览器里' },
-  error: { text: '未保存', className: 'text-[#D93F3F]', title: '写入草稿箱失败，本地内容仍保留' },
+const SYNC_LABEL: Record<Props['syncState'], { text: string; color: string; title: string }> = {
+  loading: { text: '读取中', color: 'var(--ink-3)', title: '正在从云端读取稿件' },
+  saving: { text: '保存中', color: 'var(--primary-500)', title: '正在写入草稿箱' },
+  synced: { text: '已保存', color: 'var(--success-500)', title: '这篇已经在草稿箱里了' },
+  local: { text: '仅本机', color: 'var(--warning-700)', title: '未登录：内容只存在这个浏览器里' },
+  error: { text: '未保存', color: 'var(--error-500)', title: '写入草稿箱失败，本地内容仍保留' },
 }
 
 export default function TopBar(p: Props) {
@@ -58,34 +58,39 @@ export default function TopBar(p: Props) {
   const activeTheme = THEMES.find((t) => t.id === p.themeId) || THEMES[0]
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-black/8 bg-white/85 px-4 backdrop-blur-md">
+    <header className="ya-glass flex h-14 shrink-0 items-center gap-3 px-4">
       {/* 左：标识 + 稿件 */}
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex items-baseline gap-2">
-          <span className="text-[15px] font-bold tracking-wide text-[#111]">墨排</span>
-          <span className="hidden text-[10px] uppercase tracking-[0.18em] text-[#9A9A9A] lg:inline">WeChat MD Studio</span>
+          {/* 灯与夜：brand mark，暖圆切于冷圆 */}
+          <span className="relative inline-flex h-4 w-5 self-center" aria-hidden>
+            <span className="absolute bottom-0 left-0 h-4 w-4 rounded-full bg-[#4F6CE8]/85" />
+            <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-[#F06A20]" />
+          </span>
+          <span className="text-[15px] font-bold tracking-wide text-[#0E1525]">墨排</span>
+          <span className="ya-eyebrow hidden lg:inline">wechat md studio</span>
         </div>
         <span className="h-4 w-px bg-black/10" />
-        <div className="flex items-center rounded-md transition-colors hover:bg-black/4">
+        <div className="flex items-center rounded-lg transition-colors hover:bg-black/4">
           <input
             value={p.docName}
             onChange={(e) => p.onRename(e.target.value)}
             placeholder="未命名稿件"
-            className="w-44 bg-transparent px-1.5 py-1 text-[13px] text-[#333] outline-none placeholder:text-black/25"
+            className="w-44 bg-transparent px-1.5 py-1 text-[13px] text-[#0E1525] outline-none placeholder:text-[#A1ABBF]"
             title="稿件名称"
           />
           <DropdownMenu>
-            <DropdownMenuTrigger className="rounded-r-md px-1.5 py-1 outline-none" title="切换稿件">
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-[#9A9A9A]">
+            <DropdownMenuTrigger className="rounded-r-lg px-1.5 py-1 outline-none" title="切换稿件">
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-[#6B7793]">
                 <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuContent align="start" className="ya-pop w-64 border-none">
               {p.docs.map((d) => (
-                <DropdownMenuItem key={d.id} onSelect={() => p.onSelectDoc(d.id)} className="flex items-center justify-between gap-2">
+                <DropdownMenuItem key={d.id} onSelect={() => p.onSelectDoc(d.id)} className="flex items-center justify-between gap-2 rounded-lg">
                   <span className="truncate">{d.name || '未命名稿件'}</span>
                   <span className="ml-auto flex shrink-0 items-center gap-1">
-                    {d.id === p.activeId && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#1677FF' }} />}
+                    {d.id === p.activeId && <span className="ya-dot" style={{ background: 'var(--primary-500)' }} />}
                     {p.docs.length > 1 && (
                       <button
                         onClick={(e) => {
@@ -93,7 +98,7 @@ export default function TopBar(p: Props) {
                           // No confirm here: the delete is reversible via the undo toast.
                           p.onDeleteDoc(d.id)
                         }}
-                        className="rounded px-1 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/5 hover:text-[#D93F3F]"
+                        className="ya-link-btn danger"
                         title="删除这篇稿件"
                       >
                         删除
@@ -103,12 +108,13 @@ export default function TopBar(p: Props) {
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={p.onCreateDoc}>新建稿件</DropdownMenuItem>
+              <DropdownMenuItem onSelect={p.onCreateDoc} className="rounded-lg">新建稿件</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
         <span
-          className={`shrink-0 text-[11px] tabular-nums ${SYNC_LABEL[p.syncState].className}`}
+          className="shrink-0 text-[11px] tabular-nums"
+          style={{ color: SYNC_LABEL[p.syncState].color, fontFamily: 'var(--font-mono)' }}
           title={SYNC_LABEL[p.syncState].title}
         >
           {SYNC_LABEL[p.syncState].text}
@@ -120,16 +126,16 @@ export default function TopBar(p: Props) {
       {/* 中：主题切换（实时缩略预览） */}
       <Popover open={themeOpen} onOpenChange={setThemeOpen}>
         <PopoverTrigger asChild>
-          <button className="flex items-center gap-2 rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16">
-            <span className="h-2 w-2 rounded-full" style={{ background: THEME_DOT[activeTheme.id] || '#1677FF' }} />
+          <button className="ya-btn-secondary ya-btn">
+            <span className="h-2 w-2 rounded-full" style={{ background: THEME_DOT[activeTheme.id] || '#4F6CE8' }} />
             {activeTheme.name}
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-[#9A9A9A]">
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-[#6B7793]">
               <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="center" className="w-[560px] p-3">
-          <p className="mb-2 px-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9A9A9A]">排版主题 · 当前稿件实时预览</p>
+        <PopoverContent align="center" className="ya-pop w-[560px] border-none p-3">
+          <p className="ya-eyebrow mb-2 px-1">排版主题 · 当前稿件实时预览</p>
           <div className="grid grid-cols-3 gap-2">
             {THEMES.map((t) => (
               <button
@@ -138,11 +144,11 @@ export default function TopBar(p: Props) {
                   p.onTheme(t.id)
                   setThemeOpen(false)
                 }}
-                className={`group rounded-xl border p-2 text-left transition-all ${
-                  t.id === p.themeId ? 'border-[#1677FF] ring-1 ring-[#1677FF]/30' : 'border-black/8 hover:border-black/20'
+                className={`group rounded-2xl p-2 text-left transition-all ${
+                  t.id === p.themeId ? 'ya-selected bg-[#EFF2F8]' : 'hover:bg-[#F1F4FB]'
                 }`}
               >
-                <div className="relative h-32 overflow-hidden rounded-lg bg-white ring-1 ring-black/6">
+                <div className="relative h-32 overflow-hidden rounded-xl bg-white" style={{ boxShadow: 'var(--shadow-inset)' }}>
                   <div
                     className="pointer-events-none absolute left-0 top-0 origin-top-left"
                     style={{ width: 677, transform: 'scale(0.32)' }}
@@ -150,10 +156,10 @@ export default function TopBar(p: Props) {
                   />
                 </div>
                 <div className="mt-2 flex items-center gap-1.5 px-0.5">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.ui.accent }} />
-                  <span className="text-[12px] font-medium text-[#111]">{t.name}</span>
+                  <span className="ya-dot" style={{ background: t.ui.accent }} />
+                  <span className="text-[12px] font-medium text-[#0E1525]">{t.name}</span>
                 </div>
-                <p className="px-0.5 text-[11px] text-[#9A9A9A]">{t.desc}</p>
+                <p className="px-0.5 text-[11px] text-[#6B7793]">{t.desc}</p>
               </button>
             ))}
           </div>
@@ -164,7 +170,7 @@ export default function TopBar(p: Props) {
       <div className="flex items-center gap-2">
         <button
           onClick={p.onOpenDrafts}
-          className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
+          className="ya-btn-secondary ya-btn"
           title="看保存过的所有文章"
         >
           草稿箱
@@ -172,7 +178,7 @@ export default function TopBar(p: Props) {
 
         <button
           onClick={p.onOpenMaterials}
-          className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
+          className="ya-btn-secondary ya-btn"
           title="查看图片用量、清理没在用的旧图"
         >
           素材库
@@ -182,39 +188,34 @@ export default function TopBar(p: Props) {
           onClick={p.onSaveDraft}
           disabled={p.saving}
           title={p.unsaved ? '这篇有改动还没进草稿箱' : '已经在草稿箱里了，再存一次会更新内容'}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition-all disabled:opacity-60 ${
-            p.unsaved
-              ? 'border-[#1677FF] bg-[#1677FF]/8 font-medium text-[#1677FF] hover:bg-[#1677FF]/14'
-              : 'border-black/8 bg-white text-[#333] hover:border-black/16'
-          }`}
+          className={`ya-btn ${p.unsaved ? 'ya-btn-primary' : 'ya-btn-secondary'}`}
         >
-          {p.unsaved && <span className="h-1.5 w-1.5 rounded-full bg-[#1677FF]" />}
+          {/* warning 小黄点是唯一的未保存指示 */}
+          {p.unsaved && <span className="ya-unsaved-dot" />}
           {p.saving ? '保存中…' : p.unsaved ? '保存到草稿箱' : '已保存'}
         </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16">
+            <button className="ya-btn-secondary ya-btn">
               导出
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem onSelect={() => p.onExport('clean')}>
+          <DropdownMenuContent align="end" className="ya-pop w-52 border-none">
+            <DropdownMenuItem onSelect={() => p.onExport('clean')} className="rounded-lg">
               干净正文 HTML
-              <span className="ml-auto text-[11px] text-[#9A9A9A]">仅 section</span>
+              <span className="ml-auto text-[11px] text-[#6B7793]">仅 section</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => p.onExport('page')}>
+            <DropdownMenuItem onSelect={() => p.onExport('page')} className="rounded-lg">
               预览页 HTML
-              <span className="ml-auto text-[11px] text-[#9A9A9A]">带复制按钮</span>
+              <span className="ml-auto text-[11px] text-[#6B7793]">带复制按钮</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
         <button
           onClick={p.onCopy}
-          className={`flex items-center gap-2 rounded-lg px-4 py-1.5 text-[13px] font-medium text-white transition-all ${
-            p.copying ? 'bg-[#1677FF]' : 'bg-[#111111] hover:bg-black'
-          }`}
+          className="ya-btn ya-btn-primary px-4"
         >
           {p.copying ? (
             <>
@@ -231,9 +232,7 @@ export default function TopBar(p: Props) {
         <button
           onClick={p.onTogglePanel}
           title={p.panelOpen ? '收起侧栏' : '展开侧栏'}
-          className={`rounded-lg border p-1.5 transition-colors ${
-            p.panelOpen ? 'border-black/16 bg-black/4 text-[#111]' : 'border-black/8 bg-white text-[#707070] hover:text-[#111]'
-          }`}
+          className={`ya-btn ya-btn-sm !h-9 !w-9 !p-0 ${p.panelOpen ? 'ya-btn-ghost text-[#0E1525]' : 'ya-btn-secondary'}`}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
             <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -244,20 +243,20 @@ export default function TopBar(p: Props) {
         <span className="h-4 w-px bg-black/10" />
         {p.userName ? (
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] text-[#333] outline-none transition-colors hover:bg-black/4">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1677FF]/12 text-[10px] font-medium text-[#1677FF]">
+            <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] text-[#0E1525] outline-none transition-colors hover:bg-black/4">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#4F6CE8]/12 text-[10px] font-medium text-[#4F6CE8]">
                 {p.userName.slice(0, 1)}
               </span>
               <span className="max-w-[80px] truncate">{p.userName}</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={p.onLogout}>退出登录</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="ya-pop border-none">
+              <DropdownMenuItem onSelect={p.onLogout} className="rounded-lg">退出登录</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
           <button
             onClick={p.onLogin}
-            className="rounded-lg px-2.5 py-1.5 text-[12px] text-[#707070] transition-colors hover:bg-black/4 hover:text-[#111]"
+            className="ya-link-btn !px-2.5 !py-1.5 !text-[12px]"
             title="登录后可上传图片；编辑、复制、导出无需登录"
           >
             登录

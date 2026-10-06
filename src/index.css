@@ -1,3 +1,5 @@
+@import url("/fonts/fonts-local.css");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -80,7 +82,8 @@ html, body, #root {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -90,15 +93,285 @@ body {
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,.14); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: rgba(0,0,0,.24); }
 ::-webkit-scrollbar-track { background: transparent; }
-.bg-\[\#14161B\] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border: 2px solid transparent; background-clip: content-box; }
+[data-theme="yoru"] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border: 2px solid transparent; background-clip: content-box; }
 
-/* CodeMirror 内公众号专用语法高亮 */
-.cm-md-fm { background: rgba(255,255,255,.03); color: #5C6370; }
-.cm-md-directive { background: rgba(22,119,255,.10); }
-.cm-md-signature { background: rgba(150,110,255,.12); }
-.cm-md-kicker { color: #61AFEF; font-weight: 600; }
-.cm-md-mark { color: #7DB4FF; border-bottom: 1px dashed rgba(125,180,255,.6); }
-.cm-md-image { color: #98C379; }
+/* CodeMirror 内公众号专用语法高亮（yoru 夜色系） */
+.cm-md-fm { background: rgba(255,255,255,.03); color: #6B7691; }
+.cm-md-directive { background: rgba(122,149,250,.12); }
+.cm-md-signature { background: rgba(56,200,192,.10); }
+.cm-md-kicker { color: #93A9FB; font-weight: 600; }
+.cm-md-mark { color: #B4C3FC; border-bottom: 1px dashed rgba(180,195,252,.55); }
+.cm-md-image { color: #38C8C0; }
 
 /* 预览中的轮播横向滚动条保持细腻 */
 .preview-scroll::-webkit-scrollbar { height: 6px; }
+
+/* ============================================================
+   yoru-and-akari Console tokens（akari 灯 / yoru 夜）
+   移植自 E:\DESIGN\yoru-and-akari Console Design System\colors_and_type.css
+   ============================================================ */
+:root {
+  --font-ui: "Geist", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+}
+
+/* akari (灯) — 应用主界面 */
+:root, [data-theme="akari"] {
+  --bg-base: #E8ECF3;
+  --bg-surface: #EFF2F8;
+  --bg-elevated: #F6F8FC;
+  --bg-sunken: #DEE3EC;
+  --bg-tint: #F1F4FB;
+
+  --glass-bg: hsla(220, 30%, 98%, 0.62);
+  --glass-border: hsla(225, 30%, 55%, 0.18);
+  --glass-blur: 18px;
+  --glass-sat: 140%;
+
+  --ink-1: #0E1525;
+  --ink-2: #394560;
+  --ink-3: #6B7793;
+  --ink-4: #A1ABBF;
+  --ink-on-primary: #FFFFFF;
+
+  --line-1: rgba(14, 21, 37, 0.06);
+  --line-2: rgba(14, 21, 37, 0.10);
+  --line-strong: rgba(14, 21, 37, 0.18);
+
+  --primary-100: #DCE3FE;
+  --primary-200: #B9C6FD;
+  --primary-300: #92A8FB;
+  --primary-500: #4F6CE8;
+  --primary-600: #3D58D4;
+  --primary-700: #2E44B0;
+
+  --ember-100: #FFE4D6;
+  --ember-500: #F06A20;
+  --ember-700: #C05015;
+
+  --frost-100: #DBF2F0;
+  --frost-500: #1EA8A0;
+  --frost-700: #188078;
+
+  --success-100: #DCF3E8;
+  --success-500: #2BA672;
+  --success-700: #1F7E58;
+  --warning-100: #FBEAC9;
+  --warning-500: #D89A3A;
+  --warning-700: #A57427;
+  --error-100: #FADBDB;
+  --error-500: #D45D5D;
+  --error-700: #A23F3F;
+
+  --neo-hi: rgba(255, 255, 255, 0.95);
+  --neo-lo: rgba(143, 158, 191, 0.45);
+  --neo-lo-soft: rgba(143, 158, 191, 0.28);
+
+  --shadow-flat: 0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 2px rgba(14,21,37,0.04);
+  --shadow-raised: -4px -4px 12px var(--neo-hi), 4px 4px 14px var(--neo-lo-soft);
+  --shadow-lifted: -6px -6px 18px var(--neo-hi), 8px 8px 22px var(--neo-lo);
+  --shadow-pop: 0 10px 30px -8px rgba(20, 28, 51, 0.22), 0 2px 6px rgba(20,28,51,0.06);
+  --shadow-inset: inset 3px 3px 6px var(--neo-lo-soft), inset -3px -3px 6px var(--neo-hi);
+  --shadow-inset-deep: inset 4px 4px 8px var(--neo-lo), inset -3px -3px 6px var(--neo-hi);
+  --shadow-focus: 0 0 0 3px rgba(79, 108, 232, 0.28);
+
+  --page-wash:
+    radial-gradient(120% 80% at 80% -10%, rgba(79, 108, 232, 0.07), transparent 60%),
+    radial-gradient(90% 70% at 0% 100%, rgba(240, 106, 32, 0.05), transparent 55%),
+    var(--bg-base);
+}
+
+/* yoru (夜) — 代码编辑器一块深色井 */
+[data-theme="yoru"] {
+  --bg-base: #0B1020;
+  --bg-surface: #131A2E;
+  --bg-elevated: #1B2340;
+  --bg-sunken: #080D1B;
+  --bg-tint: #182146;
+
+  --ink-1: #E6EAF6;
+  --ink-2: #A8B2CC;
+  --ink-3: #6B7691;
+  --ink-4: #434D67;
+
+  --line-1: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.10);
+
+  --primary-100: #1F2A55;
+  --primary-300: #3D52AE;
+  --primary-500: #7A95FA;
+  --primary-600: #93A9FB;
+  --primary-700: #B4C3FC;
+
+  --ember-500: #F07830;
+  --frost-500: #38C8C0;
+  --warning-500: #ECB85F;
+  --error-500: #F08484;
+
+  --neo-hi: rgba(255, 255, 255, 0.05);
+  --neo-lo: rgba(0, 0, 0, 0.55);
+  --neo-lo-soft: rgba(0, 0, 0, 0.35);
+
+  --shadow-inset: inset 3px 3px 7px var(--neo-lo-soft), inset -2px -2px 5px var(--neo-hi);
+  --shadow-pop: 0 14px 36px -10px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
+  --shadow-focus: 0 0 0 3px rgba(122, 149, 250, 0.35);
+}
+
+::selection { background: var(--primary-200); color: var(--ink-1); }
+
+/* ============================================================
+   组件配方（preview/buttons.html · inputs.html · README 铁律）
+   ============================================================ */
+
+/* 页面：瓷白底 + 灯晕 */
+.ya-page {
+  background: var(--page-wash);
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+
+/* 玻璃顶栏 */
+.ya-glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* 卡片用影子定义，不用描边 */
+.ya-card {
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-raised);
+  border-radius: 16px;
+}
+.ya-card-hover { transition: box-shadow var(--dur-fast) var(--ease-out); }
+.ya-card-hover:hover { box-shadow: var(--shadow-lifted); }
+
+/* 凹陷井：分组行、持久信息载体 */
+.ya-well {
+  background: var(--bg-sunken);
+  box-shadow: var(--shadow-inset);
+  border-radius: 16px;
+}
+
+/* 按钮：36px / r12 / 按压整体 inset + scale */
+.ya-btn {
+  height: 36px;
+  padding: 0 14px;
+  font-size: var(--text-base);
+  font-weight: 500;
+  font-family: var(--font-ui);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+}
+.ya-btn:active { transform: scale(0.985); }
+.ya-btn:disabled { background: var(--bg-sunken); color: var(--ink-4); box-shadow: none; cursor: not-allowed; transform: none; }
+.ya-btn-sm { height: 28px; padding: 0 11px; font-size: var(--text-sm); border-radius: 9px; }
+
+.ya-btn-primary { background: var(--primary-500); color: var(--ink-on-primary); box-shadow: 0 4px 12px rgba(79,108,232,0.30), inset 0 1px 0 rgba(255,255,255,0.18); }
+.ya-btn-primary:hover:not(:disabled) { background: var(--primary-600); }
+.ya-btn-primary:active:not(:disabled) { box-shadow: inset 3px 3px 6px rgba(46,68,176,0.5); }
+
+.ya-btn-secondary { background: var(--bg-base); color: var(--ink-1); box-shadow: -2px -2px 6px rgba(255,255,255,0.95), 3px 3px 8px rgba(143,158,191,0.35); }
+.ya-btn-secondary:hover:not(:disabled) { background: var(--bg-tint); }
+.ya-btn-secondary:active:not(:disabled) { box-shadow: inset 3px 3px 6px rgba(143,158,191,0.40), inset -2px -2px 5px rgba(255,255,255,0.85); }
+
+.ya-btn-ghost { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.ya-btn-ghost:hover:not(:disabled) { background: var(--bg-tint); }
+.ya-btn-ghost:active:not(:disabled) { box-shadow: var(--shadow-inset); }
+
+.ya-btn-danger { background: var(--error-500); color: #fff; box-shadow: 0 4px 12px rgba(212,93,93,0.28); }
+.ya-btn-danger:active:not(:disabled) { box-shadow: inset 3px 3px 6px rgba(162,63,63,0.5); }
+
+/* 纯文字小按钮（行内操作用） */
+.ya-link-btn {
+  border: none; background: transparent; cursor: pointer;
+  font-family: var(--font-ui); font-size: var(--text-xs);
+  color: var(--ink-3); padding: 4px 8px; border-radius: 8px;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.ya-link-btn:hover { background: var(--bg-tint); color: var(--ink-1); }
+.ya-link-btn.danger:hover { color: var(--error-700); }
+
+/* 输入：凹陷 + focus 3px halo（永不出现浏览器默认 outline） */
+.ya-input {
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  outline: none;
+  border-radius: 12px;
+  background: var(--bg-sunken);
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  box-shadow: inset 3px 3px 6px rgba(143,158,191,0.40), inset -2px -2px 5px rgba(255,255,255,0.95);
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+.ya-input::placeholder { color: var(--ink-4); }
+.ya-input:focus { box-shadow: inset 3px 3px 6px rgba(143,158,191,0.40), inset -2px -2px 5px rgba(255,255,255,0.95), var(--shadow-focus); }
+
+/* 选中态铁律：1.5px primary 描边 + 微 inset，不用 tint 底 */
+.ya-selected {
+  box-shadow: var(--shadow-inset), inset 0 0 0 1.5px var(--primary-500) !important;
+}
+
+/* 未保存小黄点（唯一的 unsaved 指示） */
+.ya-unsaved-dot {
+  width: 7px; height: 7px; border-radius: 999px;
+  background: var(--warning-500);
+  display: inline-block; flex-shrink: 0;
+}
+
+/* eyebrow 标签 */
+.ya-eyebrow {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+}
+
+/* 弹层表面 */
+.ya-pop {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-pop);
+  border-radius: 16px;
+}
+
+/* 状态点 */
+.ya-dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; }
+
+/* sonner toast 走设计语言 */
+[data-sonner-toast] {
+  background: var(--bg-elevated) !important;
+  border: none !important;
+  box-shadow: var(--shadow-pop) !important;
+  color: var(--ink-1) !important;
+  font-family: var(--font-ui) !important;
+  border-radius: 14px !important;
+}
+[data-sonner-toast] [data-description] { color: var(--ink-3) !important; }
+[data-sonner-toast] [data-button] {
+  background: var(--primary-500) !important;
+  color: #fff !important;
+  border-radius: 9px !important;
+}

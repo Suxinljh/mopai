@@ -447,7 +447,7 @@ export default function EditorPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#F7F7F9] text-[#111]">
+    <div className="ya-page flex h-screen flex-col overflow-hidden">
       <TopBar
         docs={docs}
         activeId={activeId}
@@ -509,7 +509,8 @@ export default function EditorPage() {
         {/* 左：Markdown 编辑（支持拖图上传） */}
         <ResizablePanel id="editor" defaultSize="55%" minSize="320px" className="min-w-0">
           <div
-            className="flex h-full min-w-0 flex-col bg-[#14161B]"
+            data-theme="yoru"
+            className="flex h-full min-w-0 flex-col bg-[#0B1020]"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault()
@@ -526,25 +527,25 @@ export default function EditorPage() {
             }}
           >
             <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/6 px-4">
-              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#5C6370]">
-                Markdown · 语义源稿
-                <span className="ml-2 normal-case tracking-normal text-[#3D434F]">可拖拽图片上传 · Ctrl/⌘+Space 补全 · ⌘B 加粗 · ⌘K 链接</span>
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7691]">
+                markdown · 语义源稿
+                <span className="ml-2 normal-case tracking-normal text-[#434D67]">可拖拽图片上传 · ctrl/⌘+space 补全 · ⌘B 加粗 · ⌘K 链接</span>
               </span>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="rounded-md px-2 py-1 text-[11px] text-[#8A919E] transition-colors hover:bg-white/6 hover:text-white">
+                  <button className="rounded-lg px-2 py-1 text-[11px] text-[#A8B2CC] transition-colors hover:bg-white/6 hover:text-white">
                     语法速查
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 p-0">
-                  <p className="border-b border-black/8 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9A9A9A]">
+                <PopoverContent align="end" className="ya-pop w-80 border-none p-0">
+                  <p className="ya-eyebrow border-b border-black/8 px-3 py-2">
                     公众号专用语法
                   </p>
                   <ul className="max-h-80 overflow-y-auto p-2">
                     {CHEATSHEET.map((c) => (
-                      <li key={c.syntax} className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-black/3">
-                        <code className="shrink-0 rounded bg-[#1677FF]/8 px-1.5 py-0.5 font-mono text-[11px] text-[#1677FF]">{c.syntax}</code>
-                        <span className="text-[12px] text-[#555]">{c.desc}</span>
+                      <li key={c.syntax} className="flex items-baseline gap-3 rounded-lg px-2 py-1.5 hover:bg-black/3">
+                        <code className="shrink-0 rounded-md bg-[#4F6CE8]/10 px-1.5 py-0.5 font-mono text-[11px] text-[#4F6CE8]">{c.syntax}</code>
+                        <span className="text-[12px] text-[#394560]">{c.desc}</span>
                       </li>
                     ))}
                   </ul>

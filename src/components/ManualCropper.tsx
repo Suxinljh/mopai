@@ -79,7 +79,7 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
           <DialogDescription className="text-[12px] leading-relaxed">
             {ratio ? (
               <>
-                这个轮播统一 <strong className="text-[#111]">{ratio}</strong> 比例，所以裁切框锁成该比例——
+                这个轮播统一 <strong className="text-[#0E1525]">{ratio}</strong> 比例，所以裁切框锁成该比例——
                 拖动图片决定留下哪一块，滚轮或下面的滑杆缩放。
               </>
             ) : (
@@ -89,11 +89,11 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
         </DialogHeader>
 
         <div className="mt-1">
-          <p className="mb-2 text-[11px] text-[#9A9A9A]">
+          <p className="mb-2 text-[11px] text-[#6B7793]" style={{ fontFamily: 'var(--font-mono)' }}>
             {label ? `${label} · ` : ''}{alt || '未命名'}
           </p>
 
-          <div className="relative h-[min(380px,52vh)] w-full overflow-hidden rounded-lg bg-[#14161B]">
+          <div className="relative h-[min(380px,52vh)] w-full overflow-hidden rounded-xl bg-[#0B1020]">
             {src ? (
               <Cropper
                 image={src}
@@ -108,12 +108,12 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
                 objectFit="contain"
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-[12px] text-[#8A919E]">读取图片中…</div>
+              <div className="flex h-full items-center justify-center text-[12px] text-[#6B7691]">读取图片中…</div>
             )}
           </div>
 
           <div className="mt-3 flex items-center gap-3">
-            <span className="shrink-0 text-[11px] text-[#9A9A9A]">缩放</span>
+            <span className="shrink-0 text-[11px] text-[#6B7793]">缩放</span>
             <input
               type="range"
               min={1}
@@ -121,9 +121,9 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
               step={0.01}
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
-              className="h-1 w-full accent-[#1677FF]"
+              className="h-1 w-full accent-[#4F6CE8]"
             />
-            <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-[#9A9A9A]">
+            <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-[#6B7793]">
               {zoom.toFixed(1)}×
             </span>
             <button
@@ -132,27 +132,27 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
                 setCrop({ x: 0, y: 0 })
                 setZoom(1)
               }}
-              className="shrink-0 rounded-md border border-black/8 px-2 py-0.5 text-[11px] text-[#555] transition-colors hover:border-black/20"
+              className="ya-btn-ghost ya-btn ya-btn-sm shrink-0"
             >
               复位
             </button>
           </div>
 
           {area && (
-            <p className="mt-2 text-[11px] text-[#9A9A9A]">
+            <p className="mt-2 text-[11px] text-[#6B7793]">
               取 {Math.round(area.width)}×{Math.round(area.height)} 像素
             </p>
           )}
-          {error && <p className="mt-2 text-[11px] text-[#D93F3F]">{error}</p>}
+          {error && <p className="mt-2 text-[11px] text-[#A23F3F]">{error}</p>}
         </div>
 
         {/* Sticky so the actions stay reachable when the dialog scrolls on a short window. */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 mt-3 flex justify-end gap-2 border-t border-black/8 bg-white px-6 py-3">
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-3 flex justify-end gap-2 border-t border-black/6 bg-[#F6F8FC] px-6 py-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={disabled}
-            className="rounded-lg border border-black/8 px-3 py-1.5 text-[13px] text-[#555] transition-colors hover:border-black/20 disabled:opacity-50"
+            className="ya-btn ya-btn-secondary"
           >
             取消
           </button>
@@ -160,7 +160,7 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
             type="button"
             onClick={() => void confirm()}
             disabled={disabled || !area}
-            className="rounded-lg bg-[#111] px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-black disabled:opacity-50"
+            className="ya-btn ya-btn-primary"
           >
             {working ? '裁切中…' : '用这块区域上传'}
           </button>

@@ -90,13 +90,13 @@ export default function Materials() {
   if (!isAuthenticated) {
     return (
       <Shell onBack={() => navigate('/')}>
-        <div className="rounded-xl border border-black/8 bg-white p-6">
-          <p className="text-[13px] leading-relaxed text-[#333]">
+        <div className="ya-card p-6">
+          <p className="text-[13px] leading-relaxed text-[#394560]">
             素材库需要登录才能查看——图片是按账号归属的。
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="mt-4 rounded-lg bg-[#111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-black"
+            className="ya-btn ya-btn-primary mt-4"
           >
             去登录
           </button>
@@ -109,38 +109,38 @@ export default function Materials() {
     <Shell onBack={() => navigate('/')}>
       <div className="space-y-4">
         {/* 用量 */}
-        <section className="rounded-xl border border-black/8 bg-white p-5">
+        <section className="ya-card p-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-[14px] font-semibold text-[#111]">存储用量</h2>
-            <span className="text-[12px] text-[#9A9A9A]">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
+            <h2 className="text-[14px] font-semibold text-[#0E1525]">存储用量</h2>
+            <span className="text-[12px] text-[#6B7793]">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
           </div>
           <div className="mt-3 flex items-end gap-4">
             <div>
-              <p className="text-[26px] font-bold tabular-nums leading-none text-[#111]">
+              <p className="text-[26px] font-bold tabular-nums leading-none text-[#0E1525]" style={{ fontFamily: 'var(--font-mono)' }}>
                 {formatBytes(stats.data?.totalBytes ?? 0)}
               </p>
-              <p className="mt-1 text-[12px] text-[#9A9A9A]">
+              <p className="mt-1 text-[12px] text-[#6B7793]">
                 共 {stats.data?.count ?? 0} 张 · 上限 {formatBytes(stats.data?.quotaBytes ?? 0)}
               </p>
             </div>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/6">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#DEE3EC]" style={{ boxShadow: 'var(--shadow-inset)' }}>
             <div
-              className={`h-full rounded-full transition-all ${usagePct > 85 ? 'bg-[#D93F3F]' : 'bg-[#1677FF]'}`}
-              style={{ width: `${Math.max(usagePct, stats.data?.count ? 1.5 : 0)}%` }}
+              className="h-full rounded-full transition-all"
+              style={{ width: `${Math.max(usagePct, stats.data?.count ? 1.5 : 0)}%`, background: usagePct > 85 ? 'var(--error-500)' : 'var(--primary-500)' }}
             />
           </div>
-          <p className="mt-2 text-[11px] text-[#9A9A9A]">
+          <p className="mt-2 text-[11px] text-[#6B7793]">
             图片存在 Cloudflare R2，按整个桶计量。这里显示的是本工具自己记的账。
           </p>
         </section>
 
         {/* 没在用的旧图 */}
-        <section className="rounded-xl border border-black/8 bg-white p-5">
+        <section className="ya-card p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-[14px] font-semibold text-[#111]">没在用的旧图</h2>
-              <p className="mt-1 text-[12px] leading-relaxed text-[#9A9A9A]">
+              <h2 className="text-[14px] font-semibold text-[#0E1525]">没在用的旧图</h2>
+              <p className="mt-1 text-[12px] leading-relaxed text-[#6B7793]">
                 已经存进云端稿件里的图不在此列。删掉后公众号里已粘贴的文章不受影响——微信发布时已经把图转存到它自己的服务器了。
               </p>
             </div>
@@ -150,16 +150,16 @@ export default function Materials() {
                 if (!window.confirm(`删掉选中的 ${selectedOrphans.length} 张图？这一步不能撤销。`)) return
                 removeMutation.mutate({ keys: selectedOrphans })
               }}
-              className="shrink-0 rounded-lg bg-[#111] px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+              className="ya-btn ya-btn-danger shrink-0"
             >
               {removeMutation.isPending ? '清理中…' : `清理选中 (${selectedOrphans.length})`}
             </button>
           </div>
 
           {orphans.isLoading ? (
-            <p className="mt-4 text-[13px] text-[#9A9A9A]">读取中…</p>
+            <p className="mt-4 text-[13px] text-[#6B7793]">读取中…</p>
           ) : orphanKeys.length === 0 ? (
-            <p className="mt-4 rounded-lg bg-emerald-500/8 p-3 text-[13px] text-emerald-700">
+            <p className="mt-4 rounded-xl bg-[#2BA672]/10 p-3 text-[13px] text-[#1F7E58]">
               干净，没有多余的图。
             </p>
           ) : (
@@ -167,13 +167,13 @@ export default function Materials() {
               <div className="mt-3 flex items-center gap-3">
                 <button
                   onClick={() => setSelected(new Set(orphanKeys))}
-                  className="text-[12px] text-[#1677FF] hover:underline"
+                  className="ya-link-btn !text-[12px] !text-[#4F6CE8]"
                 >
                   全选 {orphanKeys.length} 张
                 </button>
                 <button
                   onClick={() => setSelected(new Set())}
-                  className="text-[12px] text-[#9A9A9A] hover:underline"
+                  className="ya-link-btn !text-[12px]"
                 >
                   清空选择
                 </button>
@@ -192,11 +192,11 @@ export default function Materials() {
                           return next
                         })
                       }}
-                      className="h-3.5 w-3.5 shrink-0"
+                      className="h-3.5 w-3.5 shrink-0 accent-[#4F6CE8]"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] text-[#333]" title={o.key}>{o.name || o.key}</p>
-                      <p className="text-[11px] text-[#9A9A9A]">
+                      <p className="truncate text-[12px] text-[#0E1525]" title={o.key}>{o.name || o.key}</p>
+                      <p className="text-[11px] text-[#6B7793]">
                         {formatBytes(o.size)} · {formatDate(o.createdAt.getTime())}
                       </p>
                     </div>
@@ -208,12 +208,12 @@ export default function Materials() {
         </section>
 
         {/* 全部图片 */}
-        <section className="rounded-xl border border-black/8 bg-white p-5">
-          <h2 className="text-[14px] font-semibold text-[#111]">全部图片 <span className="font-normal text-[#9A9A9A]">（最近 200 张）</span></h2>
+        <section className="ya-card p-5">
+          <h2 className="text-[14px] font-semibold text-[#0E1525]">全部图片 <span className="font-normal text-[#6B7793]">（最近 200 张）</span></h2>
           {files.isLoading ? (
-            <p className="mt-3 text-[13px] text-[#9A9A9A]">读取中…</p>
+            <p className="mt-3 text-[13px] text-[#6B7793]">读取中…</p>
           ) : (files.data ?? []).length === 0 ? (
-            <p className="mt-3 text-[13px] text-[#9A9A9A]">还没有上传过图片。</p>
+            <p className="mt-3 text-[13px] text-[#6B7793]">还没有上传过图片。</p>
           ) : (
             <ul className="mt-2 divide-y divide-black/6">
               {(files.data ?? []).map((f) => {
@@ -224,22 +224,23 @@ export default function Materials() {
                       src={`/api/img/${encodeURIComponent(f.key)}`}
                       alt={f.name || f.key}
                       loading="lazy"
-                      className="h-10 w-10 shrink-0 rounded-md border border-black/8 object-cover"
+                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                      style={{ boxShadow: 'var(--shadow-flat)' }}
                       onError={(e) => {
                         // 已经被微信转存的图、或刚被删的图，这里显示一个淡占位
                         ;(e.target as HTMLImageElement).style.visibility = 'hidden'
                       }}
                     />
                     <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
-                        inUse ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+                      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] ${
+                        inUse ? 'bg-[#2BA672]/10 text-[#1F7E58]' : 'bg-[#D89A3A]/12 text-[#A57427]'
                       }`}
                     >
                       {inUse ? '在用' : '没在用'}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] text-[#333]" title={f.key}>{f.name || f.key}</p>
-                      <p className="text-[11px] text-[#9A9A9A]">
+                      <p className="truncate text-[12px] text-[#0E1525]" title={f.key}>{f.name || f.key}</p>
+                      <p className="text-[11px] text-[#6B7793]">
                         {formatBytes(f.size)} · {formatDate(f.createdAt.getTime())}
                       </p>
                     </div>
@@ -248,7 +249,7 @@ export default function Materials() {
                         if (!window.confirm('删掉这张图？引用了它的稿件会显示裂图。')) return
                         removeOneMutation.mutate({ key: f.key })
                       }}
-                      className="shrink-0 rounded px-2 py-0.5 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/4 hover:text-[#D93F3F]"
+                      className="ya-link-btn danger shrink-0"
                     >
                       删除
                     </button>
@@ -259,24 +260,24 @@ export default function Materials() {
           )}
         </section>
       </div>
-      <Toaster position="bottom-center" toastOptions={{ style: { borderRadius: 10 } }} />
+      <Toaster position="bottom-center" />
     </Shell>
   )
 }
 
 function Shell({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
-    <div className="min-h-screen bg-[#F7F7F9] text-[#111]">
-      <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-black/8 bg-white/85 px-4 backdrop-blur-md">
+    <div className="ya-page min-h-screen">
+      <header className="ya-glass sticky top-0 z-10 flex h-14 items-center gap-3 px-4">
         <button
           onClick={onBack}
-          className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
+          className="ya-btn-secondary ya-btn ya-btn-sm !h-8"
         >
           ← 回到编辑器
         </button>
         <div className="flex items-baseline gap-2">
-          <span className="text-[15px] font-bold tracking-wide text-[#111]">素材库</span>
-          <span className="text-[10px] uppercase tracking-[0.18em] text-[#9A9A9A]">Materials</span>
+          <span className="text-[15px] font-bold tracking-wide text-[#0E1525]">素材库</span>
+          <span className="ya-eyebrow">materials</span>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">{children}</main>
