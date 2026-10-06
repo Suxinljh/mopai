@@ -16,6 +16,7 @@ import {
   clearImageSrc,
   removeImageLine,
   setCarouselRatio,
+  canLocateImage,
   type MaterialItem,
 } from '@/lib/render'
 import { getTheme } from '@/lib/themes'
@@ -193,14 +194,24 @@ export default function EditorPage() {
   /** Clear one carousel slide back to a placeholder, keeping the slide line. */
   const clearImage = (item: MaterialItem) => {
     if (!activeDoc) return
-    updateActive({ content: clearImageSrc(activeDoc.content, item.alt, item.line) })
+    const next = clearImageSrc(activeDoc.content, item.alt, item.occurrence)
+    if (next === activeDoc.content) {
+      toast.error(`${item.no} 定位失败`, { description: '正文里找不到这张图，请手动修改' })
+      return
+    }
+    updateActive({ content: next })
     toast.success(`${item.no} 已清空，占位保留`)
   }
 
   /** Remove a standalone image line entirely. */
   const removeImage = (item: MaterialItem) => {
     if (!activeDoc) return
-    updateActive({ content: removeImageLine(activeDoc.content, item.alt, item.line) })
+    const next = removeImageLine(activeDoc.content, item.alt, item.occurrence)
+    if (next === activeDoc.content) {
+      toast.error(`${item.no} 定位失败`, { description: '正文里找不到这张图，请手动修改' })
+      return
+    }
+    updateActive({ content: next })
     toast.success(`${item.no} 已从正文移除`)
   }
 
@@ -258,7 +269,7 @@ export default function EditorPage() {
         if (task.item.ratio !== task.ratio && task.ratio) {
           content = setCarouselRatio(content, task.item.carouselOrdinal!, task.ratio)
         }
-        updateActive({ content: fillImageSrc(content, task.item.alt, task.item.line, ref) })
+        updateActive({ content: fillImageSrc(content, task.item.alt, task.item.occurrence, ref) })
         toast.success(`${label} 已按手动裁切上传并回填`)
       } else {
         const alt = file.name.replace(/\.[^.]+$/, '')
@@ -281,11 +292,22 @@ export default function EditorPage() {
     }
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const target = i === 0 ? item : { ...item, alt: file.name.replace(/\.[^.]+$/, '') }
-      setUploadingKey(`${target.no}-${target.alt}`)
+      // A carousel's slides are consecutive `![` slots in the source. Fill from
+      // the clicked slot onward by index, so a multi-file drop lands in order.
+      // (The old code substituted the file name as the caption, which never
+      // matched the placeholder text and made every file after the first fail
+      // silently.)
+      const occurrence = item.occurrence + i
+      if (!canLocateImage(content, item.alt, occurrence)) {
+        toast.warning(`${file.name} 没有对应的空位`, {
+          description: '这个轮播里已经没有更多占位行，多出的图请手动插入',
+        })
+        continue
+      }
+      setUploadingKey(`${item.no}-${item.alt}`)
       try {
         const ref = await uploadOne(file, ratio)
-        content = fillImageSrc(content, target.alt, target.line, ref)
+        content = fillImageSrc(content, item.alt, occurrence, ref)
       } catch (e) {
         toast.error(`${file.name} 上传失败`, {
           description: e instanceof Error ? e.message : '请稍后重试',

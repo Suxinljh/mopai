@@ -271,7 +271,13 @@ const EditorPane = forwardRef<EditorHandle, Props>(function EditorPane({ value, 
     })
     const view = new EditorView({ state, parent: hostRef.current })
     viewRef.current = view
-    return () => view.destroy()
+    // Exposed so the headless-browser check in scripts/cdp-verify-image-ops.mjs
+    // can type into the real editor instead of guessing at the DOM.
+    ;(window as unknown as { __mopaiCodemirror?: EditorView }).__mopaiCodemirror = view
+    return () => {
+      ;(window as unknown as { __mopaiCodemirror?: EditorView }).__mopaiCodemirror = undefined
+      view.destroy()
+    }
     // 仅在挂载时创建；文档切换通过下方 effect 同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

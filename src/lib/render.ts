@@ -137,6 +137,12 @@ export interface MaterialItem {
   src: string
   hasSrc: boolean
   line: number
+  /**
+   * 1-based index of this image among every `![...](...)` in the raw Markdown.
+   * Used to address the exact image back in the source — captions are not
+   * unique, and every slide in a carousel shares one line number.
+   */
+  occurrence: number
   /** Set for carousel items: every image in one carousel shares this frame. */
   ratio?: CarouselRatio
   /** Index of the carousel block, so the UI can group items of the same carousel. */
@@ -158,6 +164,7 @@ export function collectMaterials(doc: Doc): MaterialItem[] {
         src: b.src,
         hasSrc: !!b.src,
         line: b.line,
+        occurrence: b.occurrence,
       })
     } else if (b.type === 'carousel') {
       imageNo++
@@ -171,6 +178,7 @@ export function collectMaterials(doc: Doc): MaterialItem[] {
           src: it.src,
           hasSrc: !!it.src,
           line: b.line,
+          occurrence: it.occurrence,
           ratio: b.ratio,
           carouselOrdinal: carouselNo,
         })
@@ -180,21 +188,66 @@ export function collectMaterials(doc: Doc): MaterialItem[] {
   return out
 }
 
-// 上传成功后把 src 回填到 Markdown 中对应的 ![alt](...) 位置：
-// 从大约行号附近开始找第一个 alt 精确匹配的图片语法
-export function fillImageSrc(content: string, alt: string, approxLine: number, src: string): string {
-  const lines = content.split('\n')
-  const needle = `![${alt}](`
-  const order = Array.from(lines.keys()).sort((a, b) => Math.abs(a - approxLine) - Math.abs(b - approxLine))
-  for (const i of order) {
-    const idx = lines[i].indexOf(needle)
-    if (idx < 0) continue
-    const end = lines[i].indexOf(')', idx + needle.length)
-    if (end < 0) continue
-    lines[i] = lines[i].slice(0, idx) + `![${alt}](${src}` + lines[i].slice(end)
-    return lines.join('\n')
+/**
+ * Locate the exact `![alt](...)` that `occurrence` refers to.
+ *
+ * The old implementation searched by "nearest line number, then first line whose
+ * text contains the caption". Both halves are wrong once captions repeat:
+ * a carousel hands every slide the same line, and several images may share a
+ * caption, so the search silently edited whichever match it hit first. We now
+ * count `![...](` in document order and pick the Nth — the same order the
+ * parser numbered them in.
+ *
+ * Returns null when the index does not exist, so callers can report a failure
+ * instead of quietly writing to the wrong image.
+ */
+interface ImageSpan {
+  start: number
+  openEnd: number // index just past the opening `![alt](`
+  end: number // index of the closing `)`
+  alt: string // caption as it appears in the source
+}
+
+function findImageSpan(content: string, occurrence: number): ImageSpan | null {
+  if (occurrence < 1) return null
+  const re = /!\[([^\]]*)\]\(/g
+  let m: RegExpExecArray | null
+  let seen = 0
+  while ((m = re.exec(content))) {
+    seen++
+    if (seen !== occurrence) continue
+    const start = m.index
+    const openEnd = m.index + m[0].length
+    const end = content.indexOf(')', openEnd)
+    if (end < 0) return null
+    return { start, openEnd, end, alt: m[1].trim() }
   }
-  return content
+  return null
+}
+
+/**
+ * Address one image by its document-order index, checking the caption matches.
+ *
+ * The index alone is enough to find the Nth `![`, but if the user typed a new
+ * image above it the index shifts and we would edit a stranger. Comparing the
+ * caption turns that silent corruption into a refused edit.
+ */
+function locate(content: string, alt: string, occurrence: number): ImageSpan | null {
+  const span = findImageSpan(content, occurrence)
+  if (!span) return null
+  if (span.alt !== alt.trim()) return null
+  return span
+}
+
+/**
+ * Fill the src of the addressed image. Returns the content unchanged when the
+ * occurrence cannot be found — the caller is expected to surface that as an
+ * error rather than assume success.
+ */
+export function fillImageSrc(content: string, alt: string, occurrence: number, src: string): string {
+  const span = locate(content, alt, occurrence)
+  if (!span) return content
+  return content.slice(0, span.openEnd) + src + content.slice(span.end)
 }
 
 /**
@@ -202,19 +255,10 @@ export function fillImageSrc(content: string, alt: string, approxLine: number, s
  * Used by 删除 for carousel slides, where the slide line itself should stay so
  * the carousel keeps its shape.
  */
-export function clearImageSrc(content: string, alt: string, approxLine: number): string {
-  const lines = content.split('\n')
-  const needle = `![${alt}](`
-  const order = Array.from(lines.keys()).sort((a, b) => Math.abs(a - approxLine) - Math.abs(b - approxLine))
-  for (const i of order) {
-    const idx = lines[i].indexOf(needle)
-    if (idx < 0) continue
-    const end = lines[i].indexOf(')', idx + needle.length)
-    if (end < 0) continue
-    lines[i] = lines[i].slice(0, idx) + `![${alt}]()` + lines[i].slice(end + 1)
-    return lines.join('\n')
-  }
-  return content
+export function clearImageSrc(content: string, alt: string, occurrence: number): string {
+  const span = locate(content, alt, occurrence)
+  if (!span) return content
+  return content.slice(0, span.openEnd) + content.slice(span.end)
 }
 
 /**
@@ -222,18 +266,30 @@ export function clearImageSrc(content: string, alt: string, approxLine: number):
  * A standalone image is a block on its own line, so the line goes; an image
  * inside a carousel is one slide, handled by clearImageSrc instead.
  */
-export function removeImageLine(content: string, alt: string, approxLine: number): string {
-  const lines = content.split('\n')
-  const needle = `![${alt}](`
-  const order = Array.from(lines.keys()).sort((a, b) => Math.abs(a - approxLine) - Math.abs(b - approxLine))
-  for (const i of order) {
-    if (!lines[i].includes(needle)) continue
-    lines.splice(i, 1)
-    // collapse the blank line the image used to occupy
-    if (lines[i] === '' && lines[i - 1] === '') lines.splice(i, 1)
-    return lines.join('\n')
+export function removeImageLine(content: string, alt: string, occurrence: number): string {
+  const span = locate(content, alt, occurrence)
+  if (!span) return content
+  const lineStart = content.lastIndexOf('\n', span.start) + 1
+  const lineEnd = content.indexOf('\n', span.end)
+  // Keep the rest of the line: only drop it when the image is the whole line.
+  const before = content.slice(lineStart, span.start).trim()
+  const after = content.slice(span.end + 1, lineEnd < 0 ? content.length : lineEnd).trim()
+  if (before || after) {
+    // Image shares its line with text — remove just the image syntax.
+    return content.slice(0, span.start) + content.slice(span.end + 1)
   }
-  return content
+  const cutFrom = lineStart
+  let cutTo = lineEnd < 0 ? content.length : lineEnd + 1
+  // Collapse one of the blank lines the image used to occupy.
+  if (content.slice(cutTo, cutTo + 1) === '\n' && content.slice(cutFrom - 1, cutFrom) === '\n') {
+    cutTo += 1
+  }
+  return content.slice(0, cutFrom) + content.slice(cutTo)
+}
+
+/** Whether the addressed occurrence exists and still carries this caption. */
+export function canLocateImage(content: string, alt: string, occurrence: number): boolean {
+  return locate(content, alt, occurrence) !== null
 }
 
 /**

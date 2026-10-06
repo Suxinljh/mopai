@@ -18,8 +18,8 @@ export type Block =
   | { type: 'center'; segs: InlineSeg[] } // :::center 居中强调句
   | { type: 'quoteCard'; segs: InlineSeg[] } // > 金句卡片
   | { type: 'quoteBox'; paras: InlineSeg[][] } // :::quote 引文框
-  | { type: 'image'; alt: string; src: string; line: number } // ![图注](src)
-  | { type: 'carousel'; title: string; ratio: CarouselRatio; items: CarouselItem[]; line: number } // :::carousel [比例] 标题
+  | { type: 'image'; alt: string; src: string; line: number; occurrence: number } // ![图注](src)
+  | { type: 'carousel'; title: string; ratio: CarouselRatio; items: CarouselItem[]; line: number; occurrence: number } // :::carousel [比例] 标题
   | { type: 'signature' } // @signature
   | { type: 'list'; ordered: boolean; items: InlineSeg[][] }
   | { type: 'code'; lang: string; code: string }
@@ -28,6 +28,13 @@ export type Block =
 export interface CarouselItem {
   alt: string
   src: string
+  /**
+   * 1-based index of this image among every `![...](...)` in the raw Markdown,
+   * counted in document order. This is the only unambiguous way to address one
+   * image back in the source: captions repeat, and a carousel gives all its
+   * slides the same line number.
+   */
+  occurrence: number
 }
 
 /** Uniform frame every image in one carousel is cropped to at upload time. */

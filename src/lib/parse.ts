@@ -134,10 +134,41 @@ function imageFromInline(t: Token): { alt: string; src: string } | null {
 
 // ---------- block ----------
 
+/**
+ * Every `![alt](...)` in the raw body, in document order, 1-based.
+ * The AST skips inline images (an image wrapped in running text is not a block),
+ * but the source line those blocks get edited on still contains them, so the
+ * occurrence index has to be counted over the raw text to stay aligned.
+ */
+function scanImageOccurrences(body: string): { alt: string; occurrence: number }[] {
+  const out: { alt: string; occurrence: number }[] = []
+  const re = /!\[([^\]]*)\]\(/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(body))) out.push({ alt: m[1].trim(), occurrence: out.length + 1 })
+  return out
+}
+
 export function parseMarkdown(src: string): Doc {
   const { meta, body } = parseFrontMatter(src)
   const tokens = md.parse(body, {})
   const blocks: Block[] = []
+  // Cursor into the raw-scan list; images appear in the same order in both.
+  const imgScan = scanImageOccurrences(body)
+  let imgCursor = 0
+  const nextOccurrence = (alt: string): number => {
+    // Prefer the entry that matches the caption; markdown-it drops images that
+    // are not alone in their paragraph, so the two sequences can drift apart.
+    for (let i = imgCursor; i < imgScan.length; i++) {
+      if (imgScan[i].alt === alt) {
+        imgCursor = i + 1
+        return imgScan[i].occurrence
+      }
+    }
+    // Fall back to "the next one in the source" rather than failing outright.
+    const fallback = imgScan[imgCursor]?.occurrence ?? 0
+    imgCursor++
+    return fallback
+  }
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]
@@ -164,7 +195,13 @@ export function parseMarkdown(src: string): Doc {
       const inline = tokens[i + 1]
       const img = inline ? imageFromInline(inline) : null
       if (img) {
-        blocks.push({ type: 'image', alt: img.alt, src: img.src, line: t.map?.[0] ?? 0 })
+        blocks.push({
+          type: 'image',
+          alt: img.alt,
+          src: img.src,
+          line: t.map?.[0] ?? 0,
+          occurrence: nextOccurrence(img.alt),
+        })
       } else {
         const text = inline?.content.trim() || ''
         if (text === '@signature') {
@@ -235,18 +272,28 @@ export function parseMarkdown(src: string): Doc {
         }
       }
       const title = rest
-      const items: { alt: string; src: string }[] = []
+      const items: { alt: string; src: string; occurrence: number }[] = []
       i++
       while (i < tokens.length && tokens[i].type !== 'container_carousel_close') {
         // 同一行的多张图（软换行分隔）也要全部收集
         if (tokens[i].type === 'inline' && tokens[i].children) {
           for (const c of tokens[i].children!) {
-            if (c.type === 'image') items.push({ alt: c.content.trim(), src: String(c.attrGet('src') ?? '') })
+            if (c.type === 'image') {
+              const alt = c.content.trim()
+              items.push({ alt, src: String(c.attrGet('src') ?? ''), occurrence: nextOccurrence(alt) })
+            }
           }
         }
         i++
       }
-      blocks.push({ type: 'carousel', title, ratio, items, line: t.map?.[0] ?? 0 })
+      blocks.push({
+        type: 'carousel',
+        title,
+        ratio,
+        items,
+        line: t.map?.[0] ?? 0,
+        occurrence: items.length ? items[0].occurrence : nextOccurrence(''),
+      })
       continue
     }
 

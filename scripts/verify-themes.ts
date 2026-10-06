@@ -1,7 +1,7 @@
 // Throwaway: render the sample doc with all three themes and assert the
 // WeChat platform red lines. Bundled by esbuild so it can import src/lib/*.
 import { parseMarkdown } from '../src/lib/parse'
-import { renderDoc, setCarouselRatio, clearImageSrc, removeImageLine, collectMaterials } from '../src/lib/render'
+import { renderDoc, setCarouselRatio, clearImageSrc, removeImageLine, fillImageSrc, collectMaterials } from '../src/lib/render'
 import { THEMES, carouselFrame } from '../src/lib/themes'
 import { previewPage, cleanHtml } from '../src/lib/clipboard'
 import { SAMPLE_DOC } from '../src/lib/sample'
@@ -185,8 +185,11 @@ for (const theme of THEMES) {
 // --- per-image deletion -----------------------------------------------------
 {
   console.log('\n=== delete / clear an image ===')
+  // The third argument is the image's document-order index (the Nth `![`),
+  // not a line number: captions repeat and carousel slides share a line, so an
+  // index is the only unambiguous handle.
   const doc = `前面一段。\n\n![要删的单图](img:aaa.png)\n\n后面一段。\n`
-  const removed = removeImageLine(doc, '要删的单图', 2)
+  const removed = removeImageLine(doc, '要删的单图', 1)
   check('remove', 'standalone image line is gone', !removed.includes('img:aaa.png'))
   check('remove', 'surrounding prose survives',
     removed.includes('前面一段。') && removed.includes('后面一段。'))
@@ -199,6 +202,15 @@ for (const theme of THEMES) {
   check('clear', 'the other slide is untouched', cleared.includes('![乙](img:b.png)'))
   check('clear', 'carousel container survives',
     cleared.includes(':::carousel 4:3 组') && cleared.trimEnd().endsWith(':::'))
+
+  // Two slides with the same caption must still be told apart.
+  const twins = `:::carousel 4:3 组\n![同图注](img:a.png)\n![同图注](img:b.png)\n:::\n`
+  const clearedSecond = clearImageSrc(twins, '同图注', 2)
+  check('clear', 'identical captions: the right slide is cleared',
+    clearedSecond.includes('![同图注](img:a.png)') && clearedSecond.includes('![同图注]()'))
+  const removedSecond = removeImageLine(twins, '同图注', 2)
+  check('remove', 'identical captions: only the addressed line goes',
+    removedSecond.includes('img:a.png') && !removedSecond.includes('img:b.png'))
 
   // After clearing, the slide must render as a placeholder again, not a broken img.
   const reparsed = parseMarkdown(cleared)
@@ -214,6 +226,35 @@ for (const theme of THEMES) {
     changed.includes('![甲](img:a.png)') && changed.includes('![乙](img:b.png)'))
   check('ratio-change', 'new ratio applies to the rendered frame',
     renderDoc(parseMarkdown(changed), THEMES[0], sig, resolveImg).html.includes(`width="${carouselFrame('16:9').width}"`))
+}
+
+// --- uploading an image back into the source --------------------------------
+// This is the path the editor takes right after an upload. It used to locate the
+// target by caption + nearest line, which filled the wrong image whenever two
+// slides shared a caption. Nothing exercised it, so it stayed broken.
+{
+  console.log('\n=== fill the uploaded src back in ===')
+  const slots = `:::carousel 4:3 组\n![同图注]()\n![同图注]()\n![同图注]()\n:::\n`
+  const filled2 = fillImageSrc(slots, '同图注', 2, 'img:key2')
+  check('fill', 'only the addressed placeholder is filled',
+    filled2.includes('![同图注]()\n![同图注](img:key2)\n![同图注]()'))
+
+  const past = `![第一张](img:1)\n\n正文里夹着 ![行内图](img:inline) 一张图。\n\n![第二张]()\n`
+  const filledLast = fillImageSrc(past, '第二张', 3, 'img:key3')
+  check('fill', 'index counts inline images the AST cannot see',
+    filledLast.includes('![第二张](img:key3)') && filledLast.includes('![行内图](img:inline)'))
+
+  check('fill', 'an index with no match leaves the source alone',
+    fillImageSrc(past, '第二张', 9, 'img:key9') === past)
+  check('fill', 'a caption mismatch refuses the write',
+    fillImageSrc(slots, '别的图注', 1, 'img:key1') === slots)
+
+  // End to end: fill one slide of a carousel, re-parse, and confirm the slide
+  // that received the key is the one that renders.
+  const repo = parseMarkdown(fillImageSrc(slots, '同图注', 2, 'img:key2'))
+  const repoMats = collectMaterials(repo)
+  check('fill', 'the filled slide is the one reported as uploaded',
+    repoMats[0].hasSrc === false && repoMats[1].hasSrc === true && repoMats[2].hasSrc === false)
 }
 
 // --- manual crop sizing -----------------------------------------------------
