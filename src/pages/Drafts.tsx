@@ -44,6 +44,8 @@ export default function Drafts() {
   const utils = trpc.useUtils()
   const [query, setQuery] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<'savedAt' | 'chars' | 'images'>('savedAt')
+  const [onlyWithImages, setOnlyWithImages] = useState(false)
 
   const draftsQuery = trpc.docs.drafts.useQuery(undefined, { enabled: isAuthenticated, retry: false })
   const removeMutation = trpc.docs.remove.useMutation({
@@ -55,18 +57,21 @@ export default function Drafts() {
     onError: () => toast.error('删除失败'),
   })
 
-  const cards = useMemo(
-    () => (draftsQuery.data ?? []).map(toCard).sort((a, b) => b.savedAt - a.savedAt),
-    [draftsQuery.data],
-  )
+  const cards = useMemo(() => (draftsQuery.data ?? []).map(toCard), [draftsQuery.data])
+
+  const sorted = useMemo(() => {
+    const key = sortBy === 'chars' ? 'chars' : sortBy === 'images' ? 'images' : 'savedAt'
+    return [...cards].sort((a, b) => b[key] - a[key])
+  }, [cards, sortBy])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return cards
-    return cards.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.content.toLowerCase().includes(q),
-    )
-  }, [cards, query])
+    return sorted.filter((c) => {
+      if (onlyWithImages && !c.hasImages) return false
+      if (!q) return true
+      return c.name.toLowerCase().includes(q) || c.content.toLowerCase().includes(q)
+    })
+  }, [sorted, query, onlyWithImages])
 
   /** 打开这篇：写进本地「当前稿件」，回到编辑器。 */
   const openDraft = (card: DraftCard) => {
@@ -123,13 +128,32 @@ export default function Drafts() {
 
   return (
     <Shell onBack={() => navigate('/')} count={cards.length}>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜标题或正文…"
           className="min-w-0 flex-1 rounded-lg border border-black/8 bg-white px-3 py-2 text-[13px] text-[#111] outline-none placeholder:text-black/25 focus:border-[#1677FF]/40"
         />
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+          title="按什么排序"
+          className="shrink-0 rounded-lg border border-black/8 bg-white px-2.5 py-2 text-[13px] text-[#333] outline-none focus:border-[#1677FF]/40"
+        >
+          <option value="savedAt">最近保存</option>
+          <option value="chars">字数最多</option>
+          <option value="images">图片最多</option>
+        </select>
+        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-black/8 bg-white px-3 py-2 text-[13px] text-[#333]">
+          <input
+            type="checkbox"
+            checked={onlyWithImages}
+            onChange={(e) => setOnlyWithImages(e.target.checked)}
+            className="h-3.5 w-3.5"
+          />
+          只看有图
+        </label>
         <button
           onClick={() => navigate('/')}
           className="shrink-0 rounded-lg bg-[#111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-black"

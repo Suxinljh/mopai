@@ -11,15 +11,36 @@ import { docs, files } from "../db/schema";
 const MAX_BYTES = 20 * 1024 * 1024;
 
 function toTrpcError(e: unknown): never {
-  const err = e as { code?: string; message?: string };
+  const err = e as { code?: string; message?: string; cause?: { code?: string } };
   const code = err?.code || "";
+  const message = err?.message || "";
+
   if (code === "STORAGE_FILE_TOO_LARGE")
     throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "图片超过大小限制" });
   if (code === "STORAGE_UNAUTHORIZED")
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "图床鉴权失败：请检查 IMG_ADMIN_KEY 与 Worker 是否一致" });
   if (code === "STORAGE_NOT_CONFIGURED")
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "图床未配置：请检查 IMG_BASE_URL 与 IMG_ADMIN_KEY" });
-  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `上传失败（${code || "UNKNOWN"}）` });
+  if (code === "STORAGE_UPLOAD_FAILED") {
+    // The worker said no. Its message carries the HTTP status and a short
+    // detail, which is the only useful clue the owner gets.
+    const statusMatch = message.match(/\((\d{3})\)/);
+    const status = statusMatch ? statusMatch[1] : null;
+    const hint = status ? `（图床返回 ${status}）` : "";
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `图床上传失败${hint}，稍后再试` });
+  }
+
+  // Network-level failure reaching the worker: DNS, connection refused,
+  // timeout. These surface as a bare TypeError with no `code`.
+  const causeCode = err?.cause?.code;
+  if (message.includes("fetch failed") || causeCode === "ECONNREFUSED" || causeCode === "ENOTFOUND" || causeCode === "ETIMEDOUT") {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `连不上图床（${causeCode || "网络错误"}），检查 IMG_BASE_URL 是否能从服务器访问`,
+    });
+  }
+
+  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `上传失败（${code || message.slice(0, 60) || "UNKNOWN"}）` });
 }
 
 export const storageRouter = createRouter({

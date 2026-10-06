@@ -220,6 +220,16 @@ export default function Materials() {
                 const inUse = !orphanKeys.includes(f.key)
                 return (
                   <li key={f.key} className="flex items-center gap-3 py-2">
+                    <img
+                      src={`/api/img/${encodeURIComponent(f.key)}`}
+                      alt={f.name || f.key}
+                      loading="lazy"
+                      className="h-10 w-10 shrink-0 rounded-md border border-black/8 object-cover"
+                      onError={(e) => {
+                        // 已经被微信转存的图、或刚被删的图，这里显示一个淡占位
+                        ;(e.target as HTMLImageElement).style.visibility = 'hidden'
+                      }}
+                    />
                     <span
                       className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
                         inUse ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
