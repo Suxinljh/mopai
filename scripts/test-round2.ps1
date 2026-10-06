@@ -1,25 +1,42 @@
-# Exercise the round-2 features against a locally running 墨排 instance.
+# Exercise the round-2 features against a running 墨排 instance.
 #   pwsh -File scripts/test-round2.ps1 -Base http://127.0.0.1:3199 -EnvFile .env
+#   pwsh -File scripts/test-round2.ps1 -Base https://mopai.yoru-and-akari.dev -AccessEmail you@example.com
 param(
     [string]$Base = 'http://127.0.0.1:3199',
-    [string]$EnvFile = '.env'
+    [string]$EnvFile = '.env',
+    [string]$AccessKey = '',
+    # When the site sits behind Cloudflare Access, requests need an identity header.
+    [string]$AccessEmail = ''
 )
 
 $ErrorActionPreference = 'Stop'
-$accessKey = ((Get-Content $EnvFile | Where-Object { $_ -match '^ACCESS_KEY=' }) -replace '^ACCESS_KEY=', '').Trim()
+
+if ($AccessEmail) {
+    $headers = @{
+        'Cf-Access-Authenticated-User-Email' = $AccessEmail
+        'Cf-Access-Jwt-Assertion'            = 'script-test'
+    }
+} else {
+    $headers = @{}
+}
+
+if (-not $AccessKey) {
+    $AccessKey = ((Get-Content $EnvFile | Where-Object { $_ -match '^ACCESS_KEY=' }) -replace '^ACCESS_KEY=', '').Trim()
+}
+
 $sess = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 
 function Post-Trpc([string]$path, [hashtable]$payload) {
     $body = @{ json = $payload } | ConvertTo-Json -Depth 20 -Compress
     (Invoke-WebRequest -Uri "$Base/api/trpc/$path" -Method Post -ContentType 'application/json' `
-        -Body $body -WebSession $sess -UseBasicParsing).Content | ConvertFrom-Json
+        -Body $body -WebSession $sess -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json
 }
 function Get-Trpc([string]$path) {
-    (Invoke-WebRequest -Uri "$Base/api/trpc/$path" -WebSession $sess -UseBasicParsing).Content | ConvertFrom-Json
+    (Invoke-WebRequest -Uri "$Base/api/trpc/$path" -WebSession $sess -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json
 }
 
 Write-Host '=== login ==='
-$r = Post-Trpc 'auth.login' @{ accessKey = $accessKey }
+$r = Post-Trpc 'auth.login' @{ accessKey = $AccessKey }
 Write-Host "  success=$($r.result.data.json.success)"
 
 Write-Host ''
