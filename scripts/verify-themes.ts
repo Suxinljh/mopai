@@ -248,5 +248,63 @@ for (const theme of THEMES) {
     portrait.width === 720 && portrait.height === 1440, `${portrait.width}x${portrait.height}`)
 }
 
+// --- sqlite driver: a miss must be a miss ------------------------------------
+{
+  console.log('\n=== sqlite driver hit / miss ===')
+  // Regression: the driver answered a miss in a way that drizzle read as a row
+  // of all-null columns, so a check-then-insert concluded the record already
+  // existed and silently updated nothing. Core selects must distinguish hit
+  // from miss; the relational API is not usable with this driver at all.
+  const { DatabaseSync } = await import('node:sqlite')
+  const { drizzle } = await import('drizzle-orm/sqlite-proxy')
+  const { sqliteTable, integer, text } = await import('drizzle-orm/sqlite-core')
+  const { eq } = await import('drizzle-orm')
+
+  const docs = sqliteTable('docs', {
+    id: text('id').primaryKey(),
+    ownerId: integer('ownerId').notNull(),
+    name: text('name').notNull(),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  })
+
+  const raw = new DatabaseSync(':memory:')
+  raw.exec('CREATE TABLE docs (id TEXT PRIMARY KEY, ownerId INTEGER NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)')
+  const db = drizzle(
+    async (sqlText: string, params: unknown[], method: string) => {
+      const stmt = raw.prepare(sqlText)
+      if (method === 'run') {
+        const r = stmt.run(...(params as never[]))
+        return { rows: [{ changes: Number(r.changes), lastInsertRowid: r.lastInsertRowid }] }
+      }
+      if (method === 'get') {
+        const row = stmt.get(...(params as never[]))
+        if (row === undefined) return { rows: undefined as unknown as unknown[] }
+        return { rows: Object.values(row) as unknown as unknown[] }
+      }
+      return { rows: stmt.all(...(params as never[])).map((row) => Object.values(row)) }
+    },
+    { schema: { docs } },
+  )
+
+  const one = (id: string) => db.select().from(docs).where(eq(docs.id, id)).limit(1)
+
+  const miss = await one('nope')
+  check('driver', 'select on a missing row comes back empty', miss.length === 0, `len=${miss.length}`)
+  check('driver', 'a miss is not a row of nulls', miss.at(0) === undefined)
+
+  const now = new Date()
+  await db.insert(docs).values({ id: 'a', ownerId: 1, name: 'x', createdAt: now })
+  const hit = await one('a')
+  check('driver', 'select on a real row returns its values',
+    hit.length === 1 && hit[0].id === 'a' && hit[0].name === 'x' && hit[0].ownerId === 1,
+    JSON.stringify(hit))
+  check('driver', 'timestamp columns come back as Dates', hit[0]?.createdAt instanceof Date)
+
+  const stillMissing = await one('other')
+  check('driver', 'a hit does not make later misses look like hits', stillMissing.length === 0)
+  check('driver', 'the table really holds one row',
+    (raw.prepare('select count(*) c from docs').get() as { c: number }).c === 1)
+}
+
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`)
 process.exit(failures === 0 ? 0 : 1)

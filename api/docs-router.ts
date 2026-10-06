@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { docs } from "../db/schema";
@@ -11,7 +11,28 @@ const DocInput = z.object({
   updatedAt: z.number(),
 });
 
+/**
+ * Load one owned doc, or undefined.
+ *
+ * Uses a core select rather than `db.query.docs.findFirst`: the relational API
+ * maps rows by column name while drizzle's sqlite-proxy driver hands it
+ * positional values, so findFirst returns garbage with this driver. Core
+ * queries go through the positional path that actually works.
+ */
+async function findOwnedDoc(ownerId: number, id: string) {
+  const rows = await getDb()
+    .select()
+    .from(docs)
+    .where(and(eq(docs.id, id), eq(docs.ownerId, ownerId)))
+    .limit(1);
+  return rows.at(0);
+}
+
 export const docsRouter = createRouter({
+  /**
+   * Every document for this owner, saved or not. The editor needs the unsaved
+   * ones too; 草稿箱 filters on `savedAt`.
+   */
   list: authedQuery.query(async ({ ctx }) => {
     return getDb()
       .select({
@@ -19,30 +40,76 @@ export const docsRouter = createRouter({
         name: docs.name,
         content: docs.content,
         updatedAt: docs.updatedAt,
+        savedAt: docs.savedAt,
       })
       .from(docs)
       .where(eq(docs.ownerId, ctx.user.id))
       .orderBy(desc(docs.updatedAt));
   }),
 
-  /** Whole-doc upsert. The editor owns ordering, so one row at a time is enough. */
+  /** 草稿箱：只有主动保存过的。 */
+  drafts: authedQuery.query(async ({ ctx }) => {
+    return getDb()
+      .select({
+        id: docs.id,
+        name: docs.name,
+        content: docs.content,
+        updatedAt: docs.updatedAt,
+        savedAt: docs.savedAt,
+      })
+      .from(docs)
+      .where(and(eq(docs.ownerId, ctx.user.id), isNotNull(docs.savedAt)))
+      .orderBy(desc(docs.savedAt));
+  }),
+
+  /**
+   * Working write. Keeps `savedAt` untouched, so editing an archived article
+   * does not silently pass it off as freshly saved.
+   */
   save: authedQuery.input(DocInput).mutation(async ({ ctx, input }) => {
     const now = new Date(input.updatedAt || Date.now());
-    await getDb()
-      .insert(docs)
-      .values({
+    const existing = await findOwnedDoc(ctx.user.id, input.id);
+    if (!existing) {
+      await getDb().insert(docs).values({
         id: input.id,
         ownerId: ctx.user.id,
         name: input.name,
         content: input.content,
         createdAt: now,
         updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: docs.id,
-        set: { name: input.name, content: input.content, updatedAt: now },
       });
-    return { ok: true };
+      return { ok: true, savedAt: null };
+    }
+    await getDb()
+      .update(docs)
+      .set({ name: input.name, content: input.content, updatedAt: now })
+      .where(eq(docs.id, input.id));
+    return { ok: true, savedAt: existing.savedAt ? existing.savedAt.getTime() : null };
+  }),
+
+  /**
+   * 保存到草稿箱. This is the only thing that puts an article in the archive.
+   */
+  saveToDrafts: authedQuery.input(DocInput).mutation(async ({ ctx, input }) => {
+    const now = new Date(input.updatedAt || Date.now());
+    const existing = await findOwnedDoc(ctx.user.id, input.id);
+    if (!existing) {
+      await getDb().insert(docs).values({
+        id: input.id,
+        ownerId: ctx.user.id,
+        name: input.name,
+        content: input.content,
+        createdAt: now,
+        updatedAt: now,
+        savedAt: now,
+      });
+    } else {
+      await getDb()
+        .update(docs)
+        .set({ name: input.name, content: input.content, updatedAt: now, savedAt: now })
+        .where(eq(docs.id, input.id));
+    }
+    return { ok: true, savedAt: now.getTime() };
   }),
 
   /** One-shot import of whatever the browser had in localStorage. */
@@ -76,6 +143,8 @@ export const docsRouter = createRouter({
             content: d.content,
             createdAt: new Date(d.updatedAt || Date.now()),
             updatedAt: new Date(d.updatedAt || Date.now()),
+            // Imported work is not archived until the user saves it; savedAt is
+            // left out so it defaults to NULL.
           })),
         )
         .onConflictDoNothing();

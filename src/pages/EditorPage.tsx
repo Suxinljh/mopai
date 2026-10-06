@@ -82,8 +82,11 @@ export default function EditorPage() {
     syncState,
     notice,
     clearNotice,
+    hasUnsavedChanges,
+    neverSaved,
     addDoc,
     removeDoc,
+    saveCurrentToDrafts,
   } = useDocs({ enabled: isAuthenticated })
 
   const uploadMutation = trpc.storage.upload.useMutation()
@@ -344,6 +347,15 @@ export default function EditorPage() {
         onCreateDoc={() => addDoc()}
         onDeleteDoc={(id) => void removeDoc(id)}
         syncState={syncState}
+        onSaveDraft={() => {
+          void saveCurrentToDrafts().then((res) => {
+            if (res.ok) toast.success('已保存到草稿箱')
+            else toast.error(res.message)
+          })
+        }}
+        saving={syncState === 'saving'}
+        unsaved={hasUnsavedChanges || neverSaved}
+        onOpenDrafts={() => navigate('/drafts')}
         onOpenMaterials={() => navigate('/materials')}
         themeId={settings.themeId}
         onTheme={(id) => setSettings((s) => ({ ...s, themeId: id }))}

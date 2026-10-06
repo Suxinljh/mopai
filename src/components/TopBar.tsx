@@ -19,6 +19,12 @@ interface Props {
   onCreateDoc: () => void
   onDeleteDoc: (id: string) => void
   syncState: 'loading' | 'synced' | 'saving' | 'local' | 'error'
+  /** Put the open article into 草稿箱. Nothing else does that. */
+  onSaveDraft: () => void
+  saving: boolean
+  /** Edited since the last explicit save, or never saved at all. */
+  unsaved: boolean
+  onOpenDrafts: () => void
   onOpenMaterials: () => void
   themeId: string
   onTheme: (id: string) => void
@@ -41,10 +47,10 @@ const THEME_DOT: Record<string, string> = {
 
 const SYNC_LABEL: Record<Props['syncState'], { text: string; className: string; title: string }> = {
   loading: { text: '读取中', className: 'text-[#9A9A9A]', title: '正在从云端读取稿件' },
-  saving: { text: '保存中', className: 'text-[#1677FF]', title: '正在写入云端' },
-  synced: { text: '已同步', className: 'text-emerald-600', title: '稿件已保存到账号，换设备也能打开' },
-  local: { text: '仅本机', className: 'text-amber-600', title: '未登录：稿件只存在这个浏览器里' },
-  error: { text: '未同步', className: 'text-[#D93F3F]', title: '云端写入失败，本地改动仍保留' },
+  saving: { text: '保存中', className: 'text-[#1677FF]', title: '正在写入草稿箱' },
+  synced: { text: '已保存', className: 'text-emerald-600', title: '这篇已经在草稿箱里了' },
+  local: { text: '仅本机', className: 'text-amber-600', title: '未登录：内容只存在这个浏览器里' },
+  error: { text: '未保存', className: 'text-[#D93F3F]', title: '写入草稿箱失败，本地内容仍保留' },
 }
 
 export default function TopBar(p: Props) {
@@ -156,11 +162,33 @@ export default function TopBar(p: Props) {
       {/* 右：动作区 */}
       <div className="flex items-center gap-2">
         <button
+          onClick={p.onOpenDrafts}
+          className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
+          title="看保存过的所有文章"
+        >
+          草稿箱
+        </button>
+
+        <button
           onClick={p.onOpenMaterials}
           className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
           title="查看图片用量、清理没在用的旧图"
         >
           素材库
+        </button>
+
+        <button
+          onClick={p.onSaveDraft}
+          disabled={p.saving}
+          title={p.unsaved ? '这篇有改动还没进草稿箱' : '已经在草稿箱里了，再存一次会更新内容'}
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition-all disabled:opacity-60 ${
+            p.unsaved
+              ? 'border-[#1677FF] bg-[#1677FF]/8 font-medium text-[#1677FF] hover:bg-[#1677FF]/14'
+              : 'border-black/8 bg-white text-[#333] hover:border-black/16'
+          }`}
+        >
+          {p.unsaved && <span className="h-1.5 w-1.5 rounded-full bg-[#1677FF]" />}
+          {p.saving ? '保存中…' : p.unsaved ? '保存到草稿箱' : '已保存'}
         </button>
 
         <DropdownMenu>

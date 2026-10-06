@@ -6,6 +6,8 @@ export interface DocRecord {
   name: string
   content: string
   updatedAt: number
+  /** When this article was last put into 草稿箱; null = never explicitly saved. */
+  savedAt: number | null
 }
 
 export interface AppSettings {
@@ -28,13 +30,21 @@ export function loadDocs(): { docs: DocRecord[]; activeId: string } {
     if (raw) {
       const docs = JSON.parse(raw) as DocRecord[]
       if (Array.isArray(docs) && docs.length) {
-        return { docs, activeId: docs.some((d) => d.id === activeId) ? activeId : docs[0].id }
+        // Tolerate records written before savedAt existed.
+        const normalised = docs.map((d) => ({ ...d, savedAt: d.savedAt ?? null }))
+        return { docs: normalised, activeId: normalised.some((d) => d.id === activeId) ? activeId : normalised[0].id }
       }
     }
   } catch {
     // fallthrough
   }
-  const first: DocRecord = { id: uid(), name: '<SAMPLE_COMPANY>生态稿 · 示例', content: SAMPLE_DOC, updatedAt: Date.now() }
+  const first: DocRecord = {
+    id: uid(),
+    name: '<SAMPLE_COMPANY>生态稿 · 示例',
+    content: SAMPLE_DOC,
+    updatedAt: Date.now(),
+    savedAt: null,
+  }
   return { docs: [first], activeId: first.id }
 }
 
@@ -84,5 +94,11 @@ export function saveSettings(s: AppSettings) {
 }
 
 export function createDoc(): DocRecord {
-  return { id: uid(), name: '未命名稿件', content: '---\ntitles:\n  - \n---\n\n', updatedAt: Date.now() }
+  return {
+    id: uid(),
+    name: '未命名稿件',
+    content: '---\ntitles:\n  - \n---\n\n',
+    updatedAt: Date.now(),
+    savedAt: null,
+  }
 }

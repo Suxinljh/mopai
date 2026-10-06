@@ -155,7 +155,14 @@ export const storageRouter = createRouter({
   remove: authedQuery
     .input(z.object({ key: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const row = await getDb().query.files.findFirst({ where: eq(files.key, input.key) });
+      // Core select, not db.query.files.findFirst: see findOwnedDoc in
+      // docs-router for why the relational API is unusable with this driver.
+      const rows = await getDb()
+        .select({ ownerId: files.ownerId })
+        .from(files)
+        .where(eq(files.key, input.key))
+        .limit(1);
+      const row = rows.at(0);
       if (!row || row.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       await getDb().delete(files).where(eq(files.key, input.key));
       return { ok: await storage.deleteFile({ fileKey: input.key }) };

@@ -15,6 +15,9 @@ export const files = sqliteTable("files", {
 export type FileRow = typeof files.$inferSelect;
 
 // 稿件。以前只存在浏览器 localStorage，换台设备就没了。
+//
+// `savedAt` 为 null 表示只是编辑中的工作稿，还没被主动保存；草稿箱只列
+// savedAt 有值的，这样自动同步的工作稿不会混进归档。
 export const docs = sqliteTable("docs", {
   id: text("id").primaryKey(),
   ownerId: integer("ownerId").notNull(),
@@ -26,6 +29,7 @@ export const docs = sqliteTable("docs", {
   updatedAt: integer("updatedAt", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
+  savedAt: integer("savedAt", { mode: "timestamp" }),
 });
 
 export type DocRow = typeof docs.$inferSelect;

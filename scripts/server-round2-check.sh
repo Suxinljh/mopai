@@ -17,14 +17,19 @@ trap 'rm -f "$COOKIE_HDR"' EXIT
 # Capture the header and send it back by hand instead.
 post() { curl -4 -sS -m 30 -H "Cookie: $COOKIE" -X POST -H 'Content-Type: application/json' -d "$2" "$APP/api/trpc/$1"; }
 get()  { curl -4 -sS -m 30 -H "Cookie: $COOKIE" "$APP/api/trpc/$1"; }
-# A tRPC error still comes back as HTTP 200, so refuse anything without a result envelope.
+# A tRPC error still comes back as HTTP 200, so refuse anything without a result
+# envelope. Also refuse NaN, which JSON turns into the string "NaN" - a silent
+# sign that a Date or a number went wrong server-side.
 must() { python3 -c '
 import sys, json
-d = json.load(sys.stdin)
+raw = sys.stdin.read()
+d = json.loads(raw)
 if "error" in d:
     raise SystemExit("trpc error: %s" % json.dumps(d["error"], ensure_ascii=False)[:300])
 if "result" not in d:
     raise SystemExit("no result envelope: %s" % json.dumps(d, ensure_ascii=False)[:300])
+if '"'"'NaN'"'"' in raw:
+    raise SystemExit("response contains NaN: %s" % raw[:300])
 print(json.dumps(d["result"]["data"]["json"], ensure_ascii=False))
 '; }
 
@@ -82,8 +87,9 @@ import sys, json
 # Only look at this script own rows: the app seeds a demo 稿件 into an empty
 # database, so a global row count is not ours to assert on.
 mine = [r for r in json.load(sys.stdin) if r["id"].startswith("acc-")]
+assert len(mine) == 1, "expected exactly 1 acc- row, got %d: %s" % (len(mine), mine)
+assert mine[0]["name"] == "验收稿改名", "upsert did not update in place: %s" % mine[0]["name"]
 print("  acc- rows=%d name=%s" % (len(mine), mine[0]["name"]))
-assert len(mine) == 1 and mine[0]["name"] == "验收稿改名", "upsert did not update in place"
 print("  upsert-in-place OK")
 '
 post docs.importLocal '{"json":{"docs":[{"id":"acc-1","name":"旧","content":"x","updatedAt":1},{"id":"acc-2","name":"新的","content":"y","updatedAt":2}]}}' \
