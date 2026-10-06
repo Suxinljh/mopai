@@ -66,9 +66,14 @@ Write-Host ''
 Write-Host '=== upload two images, reference only one ==='
 $png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 $usedKey = $null
+# Track exactly what this script creates. Never delete by "everything that is
+# there" - that is how an earlier version of this test destroyed a real upload
+# that only existed in someone's unsaved draft.
+$ourKeys = @()
 foreach ($n in @('used','orphan')) {
     $r = Post-Trpc 'storage.upload' @{ name="$n.png"; contentBase64=$png; contentType='image/png' }
     $k = $r.result.data.json.key
+    $ourKeys += $k
     Write-Host "  $n -> $k"
     if ($n -eq 'used') {
         $usedKey = $k
@@ -103,12 +108,26 @@ Write-Host "  count=$($r.result.data.json.count)"
 if ($r.result.data.json.count -ne 1) { throw "expected 1 file left, got $($r.result.data.json.count)" }
 
 Write-Host ''
-Write-Host '=== teardown ==='
+Write-Host '=== removeOrphans refuses to delete anything still referenced ==='
+# Save a doc that points at the surviving image, then ask for it by name.
+$r = Get-Trpc 'storage.list'
+$survivor = @($r.result.data.json)[0].key
+Post-Trpc 'docs.save' @{ id='test-doc-1'; name='引用稿'; content="img:$survivor"; updatedAt=1791300020000 } | Out-Null
+$r = Post-Trpc 'storage.removeOrphans' @{ keys=@($survivor) }
+Write-Host "  deleted=$($r.result.data.json.deleted) skipped=$(@($r.result.data.json.skipped).Count)"
+if ($r.result.data.json.deleted -ne 0 -or @($r.result.data.json.skipped).Count -ne 1) {
+    throw 'the guard let a referenced image through'
+}
+$r = Get-Trpc 'storage.stats'
+if ($r.result.data.json.count -ne 1) { throw "guard test: expected the image to survive, count=$($r.result.data.json.count)" }
+Write-Host '  guard OK: referenced image survives an explicit delete request'
+
+Write-Host ''
+Write-Host '=== teardown (only our own keys) ==='
 Post-Trpc 'docs.remove' @{ id='test-doc-1' } | Out-Null
 Post-Trpc 'docs.remove' @{ id='test-doc-2' } | Out-Null
-$r = Get-Trpc 'storage.list'
-$all = @($r.result.data.json | ForEach-Object { $_.key })
-if ($all.Count) { Post-Trpc 'storage.removeOrphans' @{ keys=$all } | Out-Null }
+$r = Post-Trpc 'storage.removeOrphans' @{ keys=$ourKeys }
+Write-Host "  removed our $($ourKeys.Count) test image(s): deleted=$($r.result.data.json.deleted)"
 $r = Get-Trpc 'storage.stats'; Write-Host "  files left: $($r.result.data.json.count)"
-$r = Get-Trpc 'docs.list';  Write-Host "  docs left: $($r.result.data.json.Count)"
+$r = Get-Trpc 'docs.list';  Write-Host "  docs left: $(@($r.result.data.json).Count)"
 Write-Host 'ALL ROUND-2 CHECKS PASSED'

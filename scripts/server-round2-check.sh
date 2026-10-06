@@ -94,9 +94,14 @@ BASE_ORPHANS=$(get storage.orphans | must | python3 -c 'import sys,json; print(l
 echo "  baseline: files=$BASE_FILES orphans=$BASE_ORPHANS"
 
 PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+# Track exactly what this run creates. Never delete "everything that is there":
+# that is how an earlier version of this check destroyed a real upload that only
+# existed in someone's unsaved draft.
+OUR_KEYS=""
 for n in keep drop; do
   K=$(post storage.upload "{\"json\":{\"name\":\"$n.png\",\"contentBase64\":\"$PNG\",\"contentType\":\"image/png\"}}" \
       | must | python3 -c 'import sys,json; print(json.load(sys.stdin)["key"])')
+  OUR_KEYS="$OUR_KEYS $K"
   echo "  uploaded $n -> $K"
   if [ "$n" = keep ]; then
     post docs.save "{\"json\":{\"id\":\"acc-1\",\"name\":\"引用稿\",\"content\":\"img:$K\",\"updatedAt\":1791310003000}}" | must >/dev/null
@@ -114,6 +119,17 @@ rows = json.load(sys.stdin)
 print('  orphans: %d (baseline %d + the one we just left unreferenced)' % (len(rows), $BASE_ORPHANS))
 assert len(rows) == $BASE_ORPHANS + 1, rows
 "
+
+echo
+echo "=== the guard: a referenced image survives an explicit delete request ==="
+KEEP=$(echo $OUR_KEYS | awk '{print $1}')
+post storage.removeOrphans "{\"json\":{\"keys\":[\"$KEEP\"]}}" | must | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+print('  deleted=%s skipped=%s' % (r['deleted'], len(r['skipped'])))
+assert r['deleted'] == 0 and len(r['skipped']) == 1, r
+"
+
 KEYS=$(get storage.orphans | must | python3 -c 'import sys, json; print(json.dumps([r["key"] for r in json.load(sys.stdin)]))')
 post storage.removeOrphans "{\"json\":{\"keys\":$KEYS}}" | must | python3 -c "
 import sys, json
@@ -124,11 +140,22 @@ assert r['freedBytes'] == 70 * ($BASE_ORPHANS + 1), r
 "
 
 echo
-echo "=== teardown ==="
+echo "=== teardown (only the keys this run created) ==="
 post docs.remove '{"json":{"id":"acc-1"}}' | must >/dev/null
 post docs.remove '{"json":{"id":"acc-2"}}' | must >/dev/null
-ALL=$(get storage.list | must | python3 -c 'import sys, json; print(json.dumps([r["key"] for r in json.load(sys.stdin)]))')
-post storage.removeOrphans "{\"json\":{\"keys\":$ALL}}" | must >/dev/null
-get storage.stats | must | python3 -c 'import sys,json; n=json.load(sys.stdin)["count"]; print("  files left:", n); assert n == 0'
-get docs.list  | must | python3 -c 'import sys,json; n=len(json.load(sys.stdin)); print("  docs left:", n); assert n == 0'
+TEARDOWN=$(python3 -c "
+import json, sys
+print(json.dumps([k for k in '$OUR_KEYS'.split() if k]))
+")
+post storage.removeOrphans "{\"json\":{\"keys\":$TEARDOWN}}" | must | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+print('  removed our %s test image(s): deleted=%s' % (len($TEARDOWN), r['deleted']))
+"
+get docs.list | must | python3 -c '
+import sys, json
+mine = [r for r in json.load(sys.stdin) if r["id"].startswith("acc-")]
+print("  our docs left:", len(mine))
+assert not mine
+'
 echo ROUND-2 ACCEPTANCE PASSED

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { Toaster, toast } from 'sonner'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
+import { loadDocs } from '@/lib/store'
 
 function formatBytes(n: number): string {
   if (!n) return '0 B'
@@ -16,6 +17,23 @@ function formatDate(ts: number | null): string {
   return new Date(ts).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
+/**
+ * Image keys referenced by drafts that only exist in this browser. The server
+ * cannot see them, so without this an image someone is still working on would
+ * be offered up as an orphan.
+ */
+function localDraftKeys(): string[] {
+  const out = new Set<string>()
+  try {
+    for (const d of loadDocs().docs) {
+      for (const m of d.content.matchAll(/img:([^\s)\]]+)/g)) out.add(m[1])
+    }
+  } catch {
+    // localStorage 不可用时，孤儿判定退回只看云端稿件
+  }
+  return [...out]
+}
+
 export default function Materials() {
   const navigate = useNavigate()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
@@ -23,8 +41,10 @@ export default function Materials() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const enabled = isAuthenticated
+  // 本地草稿引用的图也算“在用”，避免误判成可清理的旧图
+  const draftKeys = useMemo(() => localDraftKeys(), [])
   const stats = trpc.storage.stats.useQuery(undefined, { enabled, retry: false })
-  const orphans = trpc.storage.orphans.useQuery(undefined, { enabled, retry: false })
+  const orphans = trpc.storage.orphans.useQuery({ alsoKeep: draftKeys }, { enabled, retry: false })
   const files = trpc.storage.list.useQuery(undefined, { enabled, retry: false })
 
   const removeMutation = trpc.storage.removeOrphans.useMutation({
@@ -35,7 +55,11 @@ export default function Materials() {
         utils.storage.orphans.invalidate(),
         utils.storage.list.invalidate(),
       ])
-      toast.success(`已清理 ${res.deleted} 张图`, { description: `腾出 ${formatBytes(res.freedBytes)}` })
+      toast.success(`已清理 ${res.deleted} 张图`, {
+        description: res.skipped.length
+          ? `腾出 ${formatBytes(res.freedBytes)}；${res.skipped.length} 张仍被稿件引用，已跳过`
+          : `腾出 ${formatBytes(res.freedBytes)}`,
+      })
     },
     onError: () => toast.error('清理失败，稍后再试'),
   })
