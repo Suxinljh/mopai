@@ -42,7 +42,10 @@ if (env.isProduction) {
   serveStaticFiles(app);
 
   const port = parseInt(process.env.PORT || "3100");
-  serve({ fetch: app.fetch, port }, () => {
-    console.log(`墨排 running on http://localhost:${port}/`);
+  // Loopback by default: the only intended entry point is the Cloudflare Tunnel,
+  // so the app must not be reachable by hitting the host's public IP directly.
+  const hostname = process.env.HOST || "127.0.0.1";
+  serve({ fetch: app.fetch, port, hostname }, () => {
+    console.log(`墨排 running on http://${hostname}:${port}/`);
   });
 }
