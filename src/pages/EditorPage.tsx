@@ -60,6 +60,12 @@ interface FrameTask {
   locked?: CarouselRatio
   /** Ratio chosen in the picker, carried over to the manual cropper. */
   ratio?: CarouselRatio | null
+  /**
+   * Set when re-cropping an existing image. The stored object keeps its old key
+   * after the new one is uploaded, so this is what lets us tell the owner that
+   * the previous copy is now unreferenced.
+   */
+  replacedKey?: string
 }
 
 export default function EditorPage() {
@@ -161,8 +167,41 @@ export default function EditorPage() {
     return `img:${res.key}`
   }
 
+  /**
+   * Tell the owner their previous upload is now unreferenced.
+   *
+   * Uploading always mints a fresh key, so a re-crop leaves the old object in R2
+   * with nothing pointing at it. We deliberately do not delete it here: another
+   * device may hold a local (unsynced) draft that still references it, and the
+   * server cannot see those. The materials page can, so point there.
+   */
+  const announceReplacedImage = () => {
+    toast.info('旧的那张图已经不再引用', {
+      description: '它还在素材库里，可以去「素材库 → 没在用的旧图」清理',
+      duration: 8000,
+      action: { label: '去清理', onClick: () => navigate('/materials') },
+    })
+  }
+
+  /**
+   * Put a re-cropped image back into the slot it came from. Distinct from the
+   * insert path: the line already exists, so it must be overwritten rather than
+   * added alongside.
+   */
+  const replaceRecropped = (ref: string, task: FrameTask) => {
+    if (!task.item || !activeDoc) return
+    const next = fillImageSrc(activeDoc.content, task.item.alt, task.item.occurrence, ref)
+    if (next === activeDoc.content) {
+      toast.error(`${task.item.no} 定位失败`, { description: '正文里找不到这张图，新图没有回填' })
+      return
+    }
+    updateActive({ content: next })
+    toast.success(`${task.item.no} 已按新裁切替换`)
+    announceReplacedImage()
+  }
+
   /** Loose images: dropped into the editor at the cursor. Cropping is optional. */
-  const uploadLoose = async (files: File[], ratio?: CarouselRatio | null) => {
+  const uploadLoose = async (files: File[], ratio?: CarouselRatio | null, task?: FrameTask | null) => {
     if (!isAuthenticated) {
       toast.error('上传图片需要先登录', {
         description: '编辑和复制不需要登录',
@@ -178,6 +217,11 @@ export default function EditorPage() {
       setUploadingKey(`drop-${file.name}`)
       try {
         const ref = await uploadOne(file, ratio ?? undefined)
+        if (task?.item && task.replacedKey) {
+          // Re-crop of a standalone image via the ratio picker: replace in place.
+          replaceRecropped(ref, task)
+          continue
+        }
         const alt = file.name.replace(/\.[^.]+$/, '')
         editorRef.current?.insertText(`![${alt}](${ref})`)
         toast.success(files.length > 1 ? `${file.name} 已插入` : '图片已插入光标位置')
@@ -247,7 +291,14 @@ export default function EditorPage() {
     try {
       const file = await fileFromImageUrl(`${window.location.origin}/api/img/${key}`, item.alt || 'image')
       // Hand it to the same manual cropper, which keeps the carousel ratio.
-      setFrameTask({ files: [file], item, mode: item.kind === '轮播' ? 'carousel' : 'loose' })
+      // Remember the old key so the owner can be told the previous copy is now
+      // unused; uploading always mints a new key, so the old object stays behind.
+      setFrameTask({
+        files: [file],
+        item,
+        mode: item.kind === '轮播' ? 'carousel' : 'loose',
+        replacedKey: key,
+      })
       setManualOpen(true)
     } catch (e) {
       toast.error('取回原图失败', { description: e instanceof Error ? e.message : '请稍后重试' })
@@ -261,6 +312,7 @@ export default function EditorPage() {
     const file = task.files[0]
     if (!file) return
     const label = task.item?.no ?? file.name
+    const isRecrop = Boolean(task.item && task.replacedKey)
     setUploadingKey(task.item ? `${task.item.no}-${task.item.alt}` : `drop-${file.name}`)
     try {
       const ref = await uploadBlob(blob, mime, file.name)
@@ -271,6 +323,9 @@ export default function EditorPage() {
         }
         updateActive({ content: fillImageSrc(content, task.item.alt, task.item.occurrence, ref) })
         toast.success(`${label} 已按手动裁切上传并回填`)
+        if (isRecrop) announceReplacedImage()
+      } else if (isRecrop) {
+        replaceRecropped(ref, task)
       } else {
         const alt = file.name.replace(/\.[^.]+$/, '')
         editorRef.current?.insertText(`![${alt}](${ref})`)
@@ -491,7 +546,9 @@ export default function EditorPage() {
           if (task.mode === 'carousel' && task.item && ratio) {
             void uploadToCarousel(task.files, task.item, ratio)
           } else {
-            void uploadLoose(task.files, ratio)
+            // Pass the task so a re-crop replaces the image instead of inserting
+            // a second copy at the cursor.
+            void uploadLoose(task.files, ratio, task)
           }
         }}
       />
