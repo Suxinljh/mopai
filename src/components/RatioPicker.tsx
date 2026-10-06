@@ -120,12 +120,12 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
           <button
             type="button"
             onClick={onManual}
-            disabled={locked}
-            title={locked ? '这个轮播的比例已定，先改正文里的 :::carousel 那一行' : undefined}
-            className="mt-2 flex w-full items-center justify-between rounded-lg border border-dashed border-black/15 px-3 py-2 text-left transition-colors hover:border-[#1677FF]/50 hover:bg-[#1677FF]/4 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-2 flex w-full items-center justify-between rounded-lg border border-dashed border-black/15 px-3 py-2 text-left transition-colors hover:border-[#1677FF]/50 hover:bg-[#1677FF]/4"
           >
             <span className="text-[12px] text-[#333]">手动裁切</span>
-            <span className="text-[11px] text-[#9A9A9A]">自己拖，决定留哪一块 →</span>
+            <span className="text-[11px] text-[#9A9A9A]">
+              {locked ? `比例锁 ${ratio}，自己拖决定留哪一块 →` : '自己拖，决定留哪一块 →'}
+            </span>
           </button>
         </div>
 

@@ -24,7 +24,7 @@ import { CHEATSHEET } from '@/lib/sample'
 import { useAuth } from '@/hooks/useAuth'
 import { trpc } from '@/providers/trpc'
 import { blobToBase64, cropToRatio, filenameForMime } from '@/lib/image'
-import type { CarouselRatio } from '@/lib/types'
+import { DEFAULT_CAROUSEL_RATIO, type CarouselRatio } from '@/lib/types'
 
 function plainTextOf(html: string): string {
   const div = document.createElement('div')
@@ -263,13 +263,17 @@ export default function EditorPage() {
       setFrameTask({ files, item, mode: 'loose' })
       return
     }
-    // 轮播里只要已经有一张图，比例就定死了；否则先让用户选。
+    // Carousel slides always get the dialog. When the carousel ratio is already
+    // fixed the picker locks it, so the choice left is how to frame the shot -
+    // auto centre-crop or manual. Uploading straight through would silently skip
+    // cropping and break the uniform frame.
     const carouselHasImage = materials.some((m) => m.carouselOrdinal === item.carouselOrdinal && m.hasSrc)
-    if (carouselHasImage && item.ratio) {
-      void uploadToCarousel(files, item, item.ratio)
-      return
-    }
-    setFrameTask({ files, item, mode: 'carousel', locked: carouselHasImage ? item.ratio : undefined })
+    setFrameTask({
+      files,
+      item,
+      mode: 'carousel',
+      locked: carouselHasImage ? item.ratio : undefined,
+    })
   }
 
   return (
@@ -402,7 +406,13 @@ export default function EditorPage() {
         file={frameTask?.files[0] ?? null}
         label={frameTask?.item?.no ?? ''}
         alt={frameTask?.item?.alt || frameTask?.files[0]?.name || ''}
-        ratio={frameTask?.locked ?? null}
+        ratio={
+          // Carousel slides must keep one frame: a locked carousel keeps its
+          // ratio, a fresh one starts at the default. Standalone images are free.
+          frameTask?.mode === 'carousel'
+            ? frameTask?.locked ?? frameTask?.ratio ?? DEFAULT_CAROUSEL_RATIO
+            : null
+        }
         busy={uploadingKey !== null}
         onCancel={() => {
           setManualOpen(false)
