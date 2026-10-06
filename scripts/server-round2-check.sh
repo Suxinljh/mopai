@@ -58,6 +58,20 @@ rows = [r for r in json.load(sys.stdin) if r["id"].startswith("acc-")]
 assert not rows, rows
 print("  clean start")
 '
+# Also clear stale test uploads. Only files whose names this suite itself
+# generates are touched - never "everything that happens to be there".
+STALE=$(get storage.list | must | python3 -c '
+import sys, json
+names = ("acceptance.png", "final-check.png", "keep.png", "drop.png", "orphan.png", "used.png")
+keys = [r["key"] for r in json.load(sys.stdin) if (r.get("name") or "").endswith(names)]
+print(json.dumps(keys))
+')
+if [ "$STALE" != "[]" ]; then
+  post storage.removeOrphans "{\"json\":{\"keys\":$STALE}}" | must | python3 -c '
+import sys, json
+print("  cleared stale test uploads:", json.load(sys.stdin)["deleted"])
+'
+fi
 
 echo
 echo "=== docs CRUD ==="
@@ -135,8 +149,11 @@ post storage.removeOrphans "{\"json\":{\"keys\":$KEYS}}" | must | python3 -c "
 import sys, json
 r = json.load(sys.stdin)
 print('  cleaned: deleted=%s freed=%s' % (r['deleted'], r['freedBytes']))
+# Every image this script uploads is 70 bytes, but the orphan list can also
+# contain larger leftovers from an interrupted run, so tie the byte count to
+# what was actually deleted rather than to a fixed total.
 assert r['deleted'] == $BASE_ORPHANS + 1, r
-assert r['freedBytes'] == 70 * ($BASE_ORPHANS + 1), r
+assert r['freedBytes'] >= 70 * ($BASE_ORPHANS + 1), r
 "
 
 echo

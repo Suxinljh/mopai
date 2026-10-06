@@ -73,7 +73,7 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
 
   return (
     <Dialog open={open} onOpenChange={(v) => (!v && !disabled ? onCancel() : undefined)}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[15px]">手动裁切</DialogTitle>
           <DialogDescription className="text-[12px] leading-relaxed">
@@ -93,7 +93,7 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
             {label ? `${label} · ` : ''}{alt || '未命名'}
           </p>
 
-          <div className="relative h-[380px] w-full overflow-hidden rounded-lg bg-[#14161B]">
+          <div className="relative h-[min(380px,52vh)] w-full overflow-hidden rounded-lg bg-[#14161B]">
             {src ? (
               <Cropper
                 image={src}
@@ -146,7 +146,8 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
           {error && <p className="mt-2 text-[11px] text-[#D93F3F]">{error}</p>}
         </div>
 
-        <div className="mt-3 flex justify-end gap-2">
+        {/* Sticky so the actions stay reachable when the dialog scrolls on a short window. */}
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-3 flex justify-end gap-2 border-t border-black/8 bg-white px-6 py-3">
           <button
             type="button"
             onClick={onCancel}

@@ -40,7 +40,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
 
   return (
     <Dialog open={open} onOpenChange={(v) => (!v && !busy ? onCancel() : undefined)}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[15px]">
             {mode === 'loose' ? '要不要按固定比例裁一下？' : '选一个画幅比例'}
@@ -129,7 +129,8 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
           </button>
         </div>
 
-        <div className="mt-2 flex justify-end gap-2">
+        {/* Sticky so the actions stay reachable when the dialog scrolls on a short window. */}
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex justify-end gap-2 border-t border-black/8 bg-white px-6 py-3">
           <button
             type="button"
             onClick={onCancel}
