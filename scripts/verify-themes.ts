@@ -1,7 +1,7 @@
 // Throwaway: render the sample doc with all three themes and assert the
 // WeChat platform red lines. Bundled by esbuild so it can import src/lib/*.
 import { parseMarkdown } from '../src/lib/parse'
-import { renderDoc, setCarouselRatio } from '../src/lib/render'
+import { renderDoc, setCarouselRatio, clearImageSrc, removeImageLine, collectMaterials } from '../src/lib/render'
 import { THEMES, carouselFrame } from '../src/lib/themes'
 import { previewPage, cleanHtml } from '../src/lib/clipboard'
 import { SAMPLE_DOC } from '../src/lib/sample'
@@ -180,6 +180,40 @@ for (const theme of THEMES) {
   check('rewrite', 'first carousel gets the new ratio', first.includes(':::carousel 9:16 第一个'))
   check('rewrite', 'second carousel is untouched', first.includes(':::carousel 1:1 第二个'))
   check('rewrite', 'out-of-range occurrence is a no-op', setCarouselRatio(two, 9, '1:1') === two)
+}
+
+// --- per-image deletion -----------------------------------------------------
+{
+  console.log('\n=== delete / clear an image ===')
+  const doc = `前面一段。\n\n![要删的单图](img:aaa.png)\n\n后面一段。\n`
+  const removed = removeImageLine(doc, '要删的单图', 2)
+  check('remove', 'standalone image line is gone', !removed.includes('img:aaa.png'))
+  check('remove', 'surrounding prose survives',
+    removed.includes('前面一段。') && removed.includes('后面一段。'))
+  check('remove', 'no run of blank lines left behind', !/\n\n\n/.test(removed))
+  check('remove', 'unknown alt is a no-op', removeImageLine(doc, '不存在', 0) === doc)
+
+  const carousel = `:::carousel 4:3 组\n![甲](img:a.png)\n![乙](img:b.png)\n:::\n`
+  const cleared = clearImageSrc(carousel, '甲', 1)
+  check('clear', 'slide keeps its line but loses the src', cleared.includes('![甲]()'))
+  check('clear', 'the other slide is untouched', cleared.includes('![乙](img:b.png)'))
+  check('clear', 'carousel container survives',
+    cleared.includes(':::carousel 4:3 组') && cleared.trimEnd().endsWith(':::'))
+
+  // After clearing, the slide must render as a placeholder again, not a broken img.
+  const reparsed = parseMarkdown(cleared)
+  const mats = collectMaterials(reparsed)
+  check('clear', 'cleared slide is reported as 待插图', mats[0].hasSrc === false && mats[1].hasSrc === true)
+  const html = renderDoc(reparsed, THEMES[0], sig, resolveImg).html
+  check('clear', 'no broken img left after clearing', (html.match(/<img /g) || []).length === 1)
+
+  // Changing a whole carousel's ratio keeps its slides.
+  const changed = setCarouselRatio(carousel, 1, '16:9')
+  check('ratio-change', 'carousel ratio rewritten', changed.includes(':::carousel 16:9 组'))
+  check('ratio-change', 'slides survive the ratio change',
+    changed.includes('![甲](img:a.png)') && changed.includes('![乙](img:b.png)'))
+  check('ratio-change', 'new ratio applies to the rendered frame',
+    renderDoc(parseMarkdown(changed), THEMES[0], sig, resolveImg).html.includes(`width="${carouselFrame('16:9').width}"`))
 }
 
 // --- manual crop sizing -----------------------------------------------------

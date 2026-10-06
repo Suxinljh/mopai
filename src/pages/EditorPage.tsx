@@ -13,6 +13,8 @@ import {
   renderDoc,
   collectMaterials,
   fillImageSrc,
+  clearImageSrc,
+  removeImageLine,
   setCarouselRatio,
   type MaterialItem,
 } from '@/lib/render'
@@ -23,7 +25,7 @@ import { useDocs } from '@/hooks/useDocs'
 import { CHEATSHEET } from '@/lib/sample'
 import { useAuth } from '@/hooks/useAuth'
 import { trpc } from '@/providers/trpc'
-import { blobToBase64, cropToRatio, filenameForMime } from '@/lib/image'
+import { blobToBase64, cropToRatio, fileFromImageUrl, filenameForMime } from '@/lib/image'
 import { DEFAULT_CAROUSEL_RATIO, type CarouselRatio } from '@/lib/types'
 
 function plainTextOf(html: string): string {
@@ -182,6 +184,61 @@ export default function EditorPage() {
       } finally {
         setUploadingKey(null)
       }
+    }
+  }
+
+  /** Clear one carousel slide back to a placeholder, keeping the slide line. */
+  const clearImage = (item: MaterialItem) => {
+    if (!activeDoc) return
+    updateActive({ content: clearImageSrc(activeDoc.content, item.alt, item.line) })
+    toast.success(`${item.no} 已清空，占位保留`)
+  }
+
+  /** Remove a standalone image line entirely. */
+  const removeImage = (item: MaterialItem) => {
+    if (!activeDoc) return
+    updateActive({ content: removeImageLine(activeDoc.content, item.alt, item.line) })
+    toast.success(`${item.no} 已从正文移除`)
+  }
+
+  /**
+   * Change the frame of a whole carousel. Existing images keep their old frame,
+   * so they are flagged for re-upload rather than pretending they still fit.
+   */
+  const changeCarouselRatio = (ordinal: number, ratio: CarouselRatio) => {
+    if (!activeDoc) return
+    updateActive({ content: setCarouselRatio(activeDoc.content, ordinal, ratio) })
+    const stale = materials.filter((m) => m.carouselOrdinal === ordinal && m.hasSrc && m.ratio !== ratio)
+    if (stale.length) {
+      toast.info(`轮播 ${ordinal} 已改成 ${ratio}`, {
+        description: `已有 ${stale.length} 张图还是旧比例，点每张的「重裁」或「替换」重做一次`,
+      })
+    } else {
+      toast.success(`轮播 ${ordinal} 已改成 ${ratio}`)
+    }
+  }
+
+  /**
+   * Re-crop an image that is already uploaded. The stored image is fetched back
+   * and re-uploaded under a new key, so the old one can be cleaned up later.
+   */
+  const recropImage = async (item: MaterialItem) => {
+    if (!activeDoc) return
+    const key = item.src.startsWith('img:') ? item.src.slice(4) : ''
+    if (!key) {
+      toast.error('这张图不是本工具上传的，无法重裁')
+      return
+    }
+    setUploadingKey(`${item.no}-${item.alt}`)
+    try {
+      const file = await fileFromImageUrl(`${window.location.origin}/api/img/${key}`, item.alt || 'image')
+      // Hand it to the same manual cropper, which keeps the carousel ratio.
+      setFrameTask({ files: [file], item, mode: item.kind === '轮播' ? 'carousel' : 'loose' })
+      setManualOpen(true)
+    } catch (e) {
+      toast.error('取回原图失败', { description: e instanceof Error ? e.message : '请稍后重试' })
+    } finally {
+      setUploadingKey(null)
     }
   }
 
@@ -370,6 +427,10 @@ export default function EditorPage() {
               toast.success('标题已复制')
             }}
             onUpload={(files, item) => startUpload(files, item)}
+            onClear={clearImage}
+            onRemove={removeImage}
+            onRecrop={(item) => void recropImage(item)}
+            onCarouselRatio={changeCarouselRatio}
             uploadingKey={uploadingKey}
           />
         )}

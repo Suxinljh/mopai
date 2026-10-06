@@ -133,6 +133,8 @@ export interface MaterialItem {
   kind: '单图' | '轮播'
   desc: string
   alt: string // Markdown 中的 alt，用于上传后定位回填
+  /** Raw src from the Markdown, e.g. `img:<key>`; empty for a placeholder. */
+  src: string
   hasSrc: boolean
   line: number
   /** Set for carousel items: every image in one carousel shares this frame. */
@@ -148,7 +150,15 @@ export function collectMaterials(doc: Doc): MaterialItem[] {
   for (const b of doc.blocks) {
     if (b.type === 'image') {
       imageNo++
-      out.push({ no: `图${imageNo}`, kind: '单图', desc: b.alt || '未命名图片', alt: b.alt, hasSrc: !!b.src, line: b.line })
+      out.push({
+        no: `图${imageNo}`,
+        kind: '单图',
+        desc: b.alt || '未命名图片',
+        alt: b.alt,
+        src: b.src,
+        hasSrc: !!b.src,
+        line: b.line,
+      })
     } else if (b.type === 'carousel') {
       imageNo++
       carouselNo++
@@ -158,6 +168,7 @@ export function collectMaterials(doc: Doc): MaterialItem[] {
           kind: '轮播',
           desc: `${b.title ? b.title + ' · ' : ''}${it.alt || '未命名'}`,
           alt: it.alt,
+          src: it.src,
           hasSrc: !!it.src,
           line: b.line,
           ratio: b.ratio,
@@ -181,6 +192,45 @@ export function fillImageSrc(content: string, alt: string, approxLine: number, s
     const end = lines[i].indexOf(')', idx + needle.length)
     if (end < 0) continue
     lines[i] = lines[i].slice(0, idx) + `![${alt}](${src}` + lines[i].slice(end)
+    return lines.join('\n')
+  }
+  return content
+}
+
+/**
+ * Clear the src of one `![alt](...)`, turning it back into a placeholder.
+ * Used by 删除 for carousel slides, where the slide line itself should stay so
+ * the carousel keeps its shape.
+ */
+export function clearImageSrc(content: string, alt: string, approxLine: number): string {
+  const lines = content.split('\n')
+  const needle = `![${alt}](`
+  const order = Array.from(lines.keys()).sort((a, b) => Math.abs(a - approxLine) - Math.abs(b - approxLine))
+  for (const i of order) {
+    const idx = lines[i].indexOf(needle)
+    if (idx < 0) continue
+    const end = lines[i].indexOf(')', idx + needle.length)
+    if (end < 0) continue
+    lines[i] = lines[i].slice(0, idx) + `![${alt}]()` + lines[i].slice(end + 1)
+    return lines.join('\n')
+  }
+  return content
+}
+
+/**
+ * Remove one whole image line / block.
+ * A standalone image is a block on its own line, so the line goes; an image
+ * inside a carousel is one slide, handled by clearImageSrc instead.
+ */
+export function removeImageLine(content: string, alt: string, approxLine: number): string {
+  const lines = content.split('\n')
+  const needle = `![${alt}](`
+  const order = Array.from(lines.keys()).sort((a, b) => Math.abs(a - approxLine) - Math.abs(b - approxLine))
+  for (const i of order) {
+    if (!lines[i].includes(needle)) continue
+    lines.splice(i, 1)
+    // collapse the blank line the image used to occupy
+    if (lines[i] === '' && lines[i - 1] === '') lines.splice(i, 1)
     return lines.join('\n')
   }
   return content

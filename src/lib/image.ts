@@ -170,6 +170,20 @@ export function blobToBase64(blob: Blob): Promise<string> {
   })
 }
 
+/**
+ * Pull an already-uploaded image back so it can be re-cropped.
+ *
+ * Uploaded images are served from our own origin, so this is a same-origin read
+ * and the canvas stays untainted.
+ */
+export async function fileFromImageUrl(url: string, name: string): Promise<File> {
+  const resp = await fetch(url, { cache: 'force-cache' })
+  if (!resp.ok) throw new Error(`取回原图失败（${resp.status}）`)
+  const blob = await resp.blob()
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png'
+  return new File([blob], `${name.replace(/\.[^.]+$/, '')}.${ext}`, { type: blob.type })
+}
+
 /** "photo.png" + "image/jpeg" -> "photo.jpg" */
 export function filenameForMime(name: string, mime: string): string {
   const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png'
