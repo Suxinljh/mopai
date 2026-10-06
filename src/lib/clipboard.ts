@@ -1,0 +1,98 @@
+// 富文本复制：优先 ClipboardItem(text/html)，降级 textarea + execCommand
+export async function copyRichText(html: string, plainText: string): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      })
+      await navigator.clipboard.write([item])
+      return true
+    }
+  } catch {
+    // fallthrough
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = '' // 占位，实际用 selection 复制富文本
+    const holder = document.createElement('div')
+    holder.innerHTML = html
+    holder.style.position = 'fixed'
+    holder.style.left = '-9999px'
+    document.body.appendChild(holder)
+    const range = document.createRange()
+    range.selectNodeContents(holder)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+    const ok = document.execCommand('copy')
+    sel?.removeAllRanges()
+    document.body.removeChild(holder)
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+export function copyPlain(text: string): Promise<boolean> {
+  return navigator.clipboard
+    .writeText(text)
+    .then(() => true)
+    .catch(() => false)
+}
+
+export function downloadFile(filename: string, content: string, mime = 'text/html') {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// 干净正文：只有根 section，可直接粘贴/留存
+export function cleanHtml(bodyHtml: string): string {
+  return bodyHtml
+}
+
+// 完整预览页：正文之外包复制按钮，方便离线校对
+export function previewPage(bodyHtml: string, title: string): string {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${title}</title>
+<style>
+  body{margin:0;background:#f3f6fa;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .bar{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e6edf6;}
+  .bar .hint{font-size:13px;color:#8a94a6;}
+  .bar button{border:none;background:#1677FF;color:#fff;font-size:14px;padding:8px 18px;border-radius:8px;cursor:pointer;}
+  .stage{padding:24px 0 64px;}
+  .stage>section{background:#fff;}
+</style>
+</head>
+<body>
+<div class="bar"><div class="hint">${title} · 预览页</div><button onclick="copyToWechat()">复制到公众号</button></div>
+<div class="stage" id="gzh-shell">
+${bodyHtml}
+</div>
+<script>
+function copyToWechat(){
+  const root=document.querySelector('#gzh-shell > section');
+  const html=root.outerHTML, text=root.innerText;
+  if(navigator.clipboard&&window.ClipboardItem){
+    const item=new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([text],{type:'text/plain'})});
+    navigator.clipboard.write([item]).then(()=>alert('已复制，去公众号后台粘贴吧'));
+    return;
+  }
+  const range=document.createRange();range.selectNodeContents(root);
+  const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+  document.execCommand('copy');sel.removeAllRanges();alert('已复制，去公众号后台粘贴吧');
+}
+</script>
+</body>
+</html>`
+}

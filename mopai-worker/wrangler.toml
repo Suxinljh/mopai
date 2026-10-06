@@ -1,0 +1,17 @@
+name = "mopai-images"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+workers_dev = true
+
+# The R2 bucket is reached only through this binding, so no S3 credentials exist
+# anywhere in the deployment.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "mopai-assets"
+
+# Custom domain rather than a workers.dev route: it matches the public URL the
+# app bakes into copied HTML, and it leaves /img/* outside the site's
+# Cloudflare Access policy.
+[[routes]]
+pattern = "mopai-img.yoru-and-akari.dev"
+custom_domain = true

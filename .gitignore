@@ -1,0 +1,19 @@
+# dependencies / build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# local state
+.env
+.env.local
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# theme verification output
+verify-out/
+
+# worker local secrets
+mopai-worker/.dev.vars
+mopai-worker/node_modules/

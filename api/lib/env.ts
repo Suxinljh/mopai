@@ -1,0 +1,37 @@
+import "dotenv/config";
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value && process.env.NODE_ENV === "production") {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value ?? "";
+}
+
+function resolveSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Missing required environment variable: SESSION_SECRET");
+  }
+  console.warn(
+    "[env] SESSION_SECRET unset, using the development fallback. Set it in .env for anything reachable from the network.",
+  );
+  return "mopai-dev-only-session-secret";
+}
+
+export const env = {
+  isProduction: process.env.NODE_ENV === "production",
+
+  // Single-owner access key. Cloudflare Access guards the site perimeter; this
+  // key backs the in-app session that gates image uploads.
+  accessKey: process.env.ACCESS_KEY ?? "mopai-dev-only-access-key",
+  sessionSecret: resolveSessionSecret(),
+
+  // SQLite database file.
+  databaseUrl: required("DATABASE_URL"),
+
+  // R2 image worker.
+  imgBaseUrl: (process.env.IMG_BASE_URL ?? "").replace(/\/+$/, ""),
+  imgAdminKey: required("IMG_ADMIN_KEY"),
+};
