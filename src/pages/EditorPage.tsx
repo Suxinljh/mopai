@@ -46,10 +46,12 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-/** One pending carousel upload: the files plus exactly which slot they fill. */
-interface CarouselFrameTask {
+/** One pending upload: the files, where they go, and whether a ratio is required. */
+interface FrameTask {
   files: File[]
-  item: MaterialItem
+  mode: 'carousel' | 'loose'
+  /** Which sidebar slot was clicked; absent for a plain drag-and-drop. */
+  item?: MaterialItem
   /** Ratio already fixed by the carousel, if it has one. */
   locked?: CarouselRatio
 }
@@ -60,7 +62,7 @@ export default function EditorPage() {
   const [previewWidth, setPreviewWidth] = useState<375 | 677>(375)
   const [copied, setCopied] = useState(false)
   const [uploadingKey, setUploadingKey] = useState<string | null>(null)
-  const [frameTask, setFrameTask] = useState<CarouselFrameTask | null>(null)
+  const [frameTask, setFrameTask] = useState<FrameTask | null>(null)
   const editorRef = useRef<EditorHandle>(null)
   const navigate = useNavigate()
   const { user, isAuthenticated, logout } = useAuth()
@@ -138,8 +140,8 @@ export default function EditorPage() {
     return `img:${res.key}`
   }
 
-  /** Loose images: dropped into the editor at the cursor, each keeping its own ratio. */
-  const uploadLoose = async (files: File[]) => {
+  /** Loose images: dropped into the editor at the cursor. Cropping is optional. */
+  const uploadLoose = async (files: File[], ratio?: CarouselRatio | null) => {
     if (!isAuthenticated) {
       toast.error('上传图片需要先登录', {
         description: '编辑和复制不需要登录',
@@ -154,7 +156,7 @@ export default function EditorPage() {
       }
       setUploadingKey(`drop-${file.name}`)
       try {
-        const ref = await uploadOne(file)
+        const ref = await uploadOne(file, ratio ?? undefined)
         const alt = file.name.replace(/\.[^.]+$/, '')
         editorRef.current?.insertText(`![${alt}](${ref})`)
         toast.success(files.length > 1 ? `${file.name} 已插入` : '图片已插入光标位置')
@@ -215,7 +217,8 @@ export default function EditorPage() {
       return
     }
     if (item.kind !== '轮播') {
-      void uploadLoose(files)
+      // 单图不强制裁切，但给一个选项，省得想统一高度时还得重传
+      setFrameTask({ files, item, mode: 'loose' })
       return
     }
     // 轮播里只要已经有一张图，比例就定死了；否则先让用户选。
@@ -224,7 +227,7 @@ export default function EditorPage() {
       void uploadToCarousel(files, item, item.ratio)
       return
     }
-    setFrameTask({ files, item, locked: carouselHasImage ? item.ratio : undefined })
+    setFrameTask({ files, item, mode: 'carousel', locked: carouselHasImage ? item.ratio : undefined })
   }
 
   return (
@@ -260,7 +263,15 @@ export default function EditorPage() {
           onDrop={(e) => {
             e.preventDefault()
             const files = Array.from(e.dataTransfer.files || [])
-            if (files.length) void uploadLoose(files)
+            if (!files.length) return
+            if (!isAuthenticated) {
+              toast.error('上传图片需要先登录', {
+                description: '编辑和复制不需要登录',
+                action: { label: '去登录', onClick: () => navigate('/login') },
+              })
+              return
+            }
+            setFrameTask({ files, mode: 'loose' })
           }}
         >
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/6 px-4">
@@ -320,15 +331,21 @@ export default function EditorPage() {
 
       <RatioPicker
         open={frameTask !== null}
-        label={frameTask?.item.no ?? ''}
-        alt={frameTask?.item.alt ?? ''}
+        label={frameTask?.item?.no ?? ''}
+        alt={frameTask?.item?.alt || frameTask?.files[0]?.name || ''}
         current={frameTask?.locked}
+        mode={frameTask?.mode ?? 'loose'}
         busy={uploadingKey !== null}
         onCancel={() => setFrameTask(null)}
         onConfirm={(ratio) => {
           const task = frameTask
           setFrameTask(null)
-          if (task) void uploadToCarousel(task.files, task.item, ratio)
+          if (!task) return
+          if (task.mode === 'carousel' && task.item && ratio) {
+            void uploadToCarousel(task.files, task.item, ratio)
+          } else {
+            void uploadLoose(task.files, ratio)
+          }
         }}
       />
 

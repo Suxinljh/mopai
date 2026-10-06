@@ -65,9 +65,11 @@ post docs.save '{"json":{"id":"acc-1","name":"验收稿","content":"# 一\n","up
 post docs.save '{"json":{"id":"acc-1","name":"验收稿改名","content":"# 二\n","updatedAt":1791310001000}}' | must >/dev/null
 get docs.list | must | python3 -c '
 import sys, json
-rows = json.load(sys.stdin)
-print("  rows=%d name=%s" % (len(rows), rows[0]["name"]))
-assert len(rows) == 1 and rows[0]["name"] == "验收稿改名", "upsert did not update in place"
+# Only look at this script own rows: the app seeds a demo 稿件 into an empty
+# database, so a global row count is not ours to assert on.
+mine = [r for r in json.load(sys.stdin) if r["id"].startswith("acc-")]
+print("  acc- rows=%d name=%s" % (len(mine), mine[0]["name"]))
+assert len(mine) == 1 and mine[0]["name"] == "验收稿改名", "upsert did not update in place"
 print("  upsert-in-place OK")
 '
 post docs.importLocal '{"json":{"docs":[{"id":"acc-1","name":"旧","content":"x","updatedAt":1},{"id":"acc-2","name":"新的","content":"y","updatedAt":2}]}}' \

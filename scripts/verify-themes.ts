@@ -151,6 +151,9 @@ for (const theme of THEMES) {
     const target = Number(r.split(':')[0]) / Number(r.split(':')[1])
     check(r, 'frame width/height matches the requested ratio', Math.abs(implied - target) < 0.02,
       `${f.width}x${f.height} vs ${r}`)
+    // 轮播里的 img:key 也必须被解析成绝对地址（曾经漏掉，导致整条轮播裂图）
+    check(r, 'carousel slides resolve img:key to an absolute URL',
+      !/src="img:/.test(html) && (html.match(/src="https:\/\/mopai\.yoru-and-akari\.dev\/api\/img\//g) || []).length === 2)
   }
 
   // 老稿件没写比例，必须照旧能渲染

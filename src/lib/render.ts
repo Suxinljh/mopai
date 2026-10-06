@@ -82,7 +82,10 @@ export function renderDoc(
         images += b.items.length
         if (b.items.length < 2) warnings.push('轮播至少需要 2 张图片')
         const caption = `图${imageNo} ${b.title || '多图轮播'}（共 ${b.items.length} 张）`
-        pushBlock(theme.carousel(b.title, caption, b.items, b.ratio), true)
+        // Carousel slides go through the same resolver as single images; skipping
+        // it left `img:key` untouched and the slides rendered as broken images.
+        const items = b.items.map((it) => ({ ...it, src: it.src ? resolveImg(it.src) : '' }))
+        pushBlock(theme.carousel(b.title, caption, items, b.ratio), true)
         break
       }
       case 'signature':
