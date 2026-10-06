@@ -101,6 +101,60 @@ function gzhCompletions(context: CompletionContext) {
   }
 }
 
+// ---------- 快捷键 ----------
+// 包一层选区：有选中就包住它，没有就放入占位文字并选中，方便直接打字覆盖。
+function wrapSelection(view: EditorView, before: string, after: string, placeholder: string): boolean {
+  const { from, to } = view.state.selection.main
+  const text = view.state.sliceDoc(from, to) || placeholder
+  view.dispatch({
+    changes: { from, to, insert: before + text + after },
+    selection: { anchor: from + before.length, head: from + before.length + text.length },
+  })
+  view.focus()
+  return true
+}
+
+const gzhKeymap = keymap.of([
+  { key: 'Mod-b', run: (v) => wrapSelection(v, '**', '**', '加粗文字') },
+  { key: 'Mod-i', run: (v) => wrapSelection(v, '*', '*', '斜体文字') },
+  {
+    key: 'Mod-k',
+    run: (v) => {
+      const { from, to } = v.state.selection.main
+      const selected = v.state.sliceDoc(from, to)
+      if (selected) {
+        // 选中文字变链接文字，光标落进括号里填地址
+        v.dispatch({
+          changes: { from, to, insert: `[${selected}]()` },
+          selection: { anchor: from + selected.length + 3 },
+        })
+      } else {
+        v.dispatch({
+          changes: { from, insert: '[链接文字]()' },
+          selection: { anchor: from + 1, head: from + 5 },
+        })
+      }
+      v.focus()
+      return true
+    },
+  },
+  {
+    key: 'Mod-Shift-i',
+    run: (v) => {
+      const pos = v.state.selection.main.head
+      const line = v.state.doc.lineAt(pos)
+      const before = line.text.trim() ? '\n\n' : ''
+      const mark = '![图注]()'
+      v.dispatch({
+        changes: { from: pos, insert: before + mark + '\n' },
+        selection: { anchor: pos + before.length + 2, head: pos + before.length + 4 },
+      })
+      v.focus()
+      return true
+    },
+  },
+])
+
 // 公众号专用语法高亮（暗色编辑器内）
 const syntaxDecorations = ViewPlugin.fromClass(
   class {
@@ -250,6 +304,7 @@ const EditorPane = forwardRef<EditorHandle, Props>(function EditorPane({ value, 
         lineNumbers(),
         highlightActiveLine(),
         history(),
+        gzhKeymap,
         keymap.of([...completionKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
         markdown({ base: markdownLanguage }),
         syntaxHighlighting(mdHighlight),
