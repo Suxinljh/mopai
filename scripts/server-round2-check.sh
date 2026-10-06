@@ -80,7 +80,8 @@ fi
 
 echo
 echo "=== docs CRUD ==="
-post docs.save '{"json":{"id":"acc-1","name":"验收稿","content":"# 一\n","updatedAt":1791310000000}}' | must >/dev/null
+# save is update-only by contract: new rows come from saveToDrafts/importLocal.
+post docs.saveToDrafts '{"json":{"id":"acc-1","name":"验收稿","content":"# 一\n","updatedAt":1791310000000}}' | must >/dev/null
 post docs.save '{"json":{"id":"acc-1","name":"验收稿改名","content":"# 二\n","updatedAt":1791310001000}}' | must >/dev/null
 get docs.list | must | python3 -c '
 import sys, json
@@ -88,9 +89,24 @@ import sys, json
 # database, so a global row count is not ours to assert on.
 mine = [r for r in json.load(sys.stdin) if r["id"].startswith("acc-")]
 assert len(mine) == 1, "expected exactly 1 acc- row, got %d: %s" % (len(mine), mine)
-assert mine[0]["name"] == "验收稿改名", "upsert did not update in place: %s" % mine[0]["name"]
+assert mine[0]["name"] == "验收稿改名", "update did not apply in place: %s" % mine[0]["name"]
 print("  acc- rows=%d name=%s" % (len(mine), mine[0]["name"]))
-print("  upsert-in-place OK")
+print("  update-in-place OK")
+'
+
+echo
+echo "=== a save for a deleted id must not revive the article ==="
+post docs.save '{"json":{"id":"acc-ghost","name":"复活稿","content":"# 诈尸\n","updatedAt":1791310000500}}' | must | python3 -c '
+import sys, json
+r = json.load(sys.stdin)
+assert r.get("missing") is True, "expected missing=true for an unknown id: %s" % r
+print("  server answered missing=true")
+'
+get docs.list | must | python3 -c '
+import sys, json
+mine = [r for r in json.load(sys.stdin) if r["id"] == "acc-ghost"]
+assert not mine, "save re-created a deleted article: %s" % mine
+print("  no zombie row created")
 '
 post docs.importLocal '{"json":{"docs":[{"id":"acc-1","name":"旧","content":"x","updatedAt":1},{"id":"acc-2","name":"新的","content":"y","updatedAt":2}]}}' \
   | must | python3 -c 'import sys,json; n=json.load(sys.stdin)["imported"]; print("  importLocal imported:", n); assert n == 1'

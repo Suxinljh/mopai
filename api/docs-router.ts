@@ -65,26 +65,24 @@ export const docsRouter = createRouter({
   /**
    * Working write. Keeps `savedAt` untouched, so editing an archived article
    * does not silently pass it off as freshly saved.
+   *
+   * Deliberately update-only: new rows come from saveToDrafts / importLocal.
+   * An auto-save arriving after the article was deleted (on this device or
+   * another) must not re-create it — the upsert this used to be made deleted
+   * articles come back from the dead. `missing` tells the client the row is
+   * gone so it can stop retrying and downgrade the article to a local draft.
    */
   save: authedQuery.input(DocInput).mutation(async ({ ctx, input }) => {
     const now = new Date(input.updatedAt || Date.now());
     const existing = await findOwnedDoc(ctx.user.id, input.id);
     if (!existing) {
-      await getDb().insert(docs).values({
-        id: input.id,
-        ownerId: ctx.user.id,
-        name: input.name,
-        content: input.content,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return { ok: true, savedAt: null };
+      return { ok: true, savedAt: null, missing: true };
     }
     await getDb()
       .update(docs)
       .set({ name: input.name, content: input.content, updatedAt: now })
       .where(eq(docs.id, input.id));
-    return { ok: true, savedAt: existing.savedAt ? existing.savedAt.getTime() : null };
+    return { ok: true, savedAt: existing.savedAt ? existing.savedAt.getTime() : null, missing: false };
   }),
 
   /**

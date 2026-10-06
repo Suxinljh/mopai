@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Toaster, toast } from 'sonner'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import { loadDocs, saveActiveId } from '@/lib/store'
+import { UNDO_DELETE_MS } from '@/hooks/useDocs'
 
 interface DraftCard {
   id: string
@@ -46,16 +47,48 @@ export default function Drafts() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'savedAt' | 'chars' | 'images'>('savedAt')
   const [onlyWithImages, setOnlyWithImages] = useState(false)
+  // Cards awaiting their deferred server delete; hidden from the list but
+  // restorable until the timer fires.
+  const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set())
+  const deleteTimers = useRef<Map<string, number>>(new Map())
 
   const draftsQuery = trpc.docs.drafts.useQuery(undefined, { enabled: isAuthenticated, retry: false })
   const removeMutation = trpc.docs.remove.useMutation({
     onSuccess: async () => {
       await utils.docs.drafts.invalidate()
       await utils.docs.list.invalidate()
-      toast.success('已删除')
     },
     onError: () => toast.error('删除失败'),
   })
+
+  /** Soft delete: hide the card now, delete on the server only after the undo window. */
+  const deleteDraft = (card: DraftCard) => {
+    setPendingDeletes((prev) => new Set(prev).add(card.id))
+    const timer = window.setTimeout(() => {
+      deleteTimers.current.delete(card.id)
+      removeMutation.mutate({ id: card.id })
+    }, UNDO_DELETE_MS)
+    deleteTimers.current.set(card.id, timer)
+    toast(`已删除「${card.name || '未命名稿件'}」`, {
+      description: '10 秒内可以撤销',
+      duration: UNDO_DELETE_MS,
+      action: {
+        label: '撤销',
+        onClick: () => {
+          const t = deleteTimers.current.get(card.id)
+          if (t === undefined) return
+          window.clearTimeout(t)
+          deleteTimers.current.delete(card.id)
+          setPendingDeletes((prev) => {
+            const next = new Set(prev)
+            next.delete(card.id)
+            return next
+          })
+          toast.success('已恢复')
+        },
+      },
+    })
+  }
 
   const cards = useMemo(() => (draftsQuery.data ?? []).map(toCard), [draftsQuery.data])
 
@@ -67,11 +100,12 @@ export default function Drafts() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return sorted.filter((c) => {
+      if (pendingDeletes.has(c.id)) return false
       if (onlyWithImages && !c.hasImages) return false
       if (!q) return true
       return c.name.toLowerCase().includes(q) || c.content.toLowerCase().includes(q)
     })
-  }, [sorted, query, onlyWithImages])
+  }, [sorted, query, onlyWithImages, pendingDeletes])
 
   /** 打开这篇：写进本地「当前稿件」，回到编辑器。 */
   const openDraft = (card: DraftCard) => {
@@ -216,11 +250,7 @@ export default function Drafts() {
                     {copiedId === c.id ? '已复制' : '复制 md'}
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`删掉「${c.name || '未命名稿件'}」？这一步不能撤销。`)) {
-                        removeMutation.mutate({ id: c.id })
-                      }
-                    }}
+                    onClick={() => deleteDraft(c)}
                     className="rounded-md px-2.5 py-1 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/4 hover:text-[#D93F3F]"
                   >
                     删除

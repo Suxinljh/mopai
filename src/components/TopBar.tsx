@@ -90,7 +90,8 @@ export default function TopBar(p: Props) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          if (window.confirm(`删掉「${d.name || '未命名稿件'}」？这一步不能撤销。`)) p.onDeleteDoc(d.id)
+                          // No confirm here: the delete is reversible via the undo toast.
+                          p.onDeleteDoc(d.id)
                         }}
                         className="rounded px-1 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/5 hover:text-[#D93F3F]"
                         title="删除这篇稿件"

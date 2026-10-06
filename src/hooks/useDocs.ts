@@ -4,6 +4,9 @@ import { createDoc, loadDocs, loadActiveId, saveDocs, saveActiveId, type DocReco
 
 export type SyncState = 'loading' | 'synced' | 'saving' | 'local' | 'error'
 
+/** How long a delete stays reversible. */
+export const UNDO_DELETE_MS = 10_000
+
 interface Options {
   /** Server sync needs a session; anonymous visitors stay on localStorage. */
   enabled: boolean
@@ -32,6 +35,10 @@ export function useDocs({ enabled }: Options) {
   const migratedRef = useRef(false)
   const saveTimer = useRef<number | null>(null)
   const pendingRef = useRef<Set<string>>(new Set())
+  // Docs deleted within the undo window: kept whole so 撤销 can put them back
+  // exactly where they were; the server delete only fires when the timer runs
+  // out. Closing the tab first simply skips the delete — the doc survives.
+  const pendingDeletesRef = useRef<Map<string, { doc: DocRecord; index: number; timer: number }>>(new Map())
   // 最近一次已落库的内容，用来判断是否真的需要再写一次
   const lastSavedRef = useRef<Map<string, string>>(new Map())
 
@@ -109,13 +116,20 @@ export function useDocs({ enabled }: Options) {
       setSyncState('saving')
       try {
         for (const d of targets) {
-          await saveMutation.mutateAsync({
+          const res = await saveMutation.mutateAsync({
             id: d.id,
             name: d.name,
             content: d.content,
             updatedAt: d.updatedAt,
           })
           lastSavedRef.current.set(d.id, d.content)
+          if (res.missing) {
+            // The row is gone server-side (deleted on another device). Keep
+            // the article as a local, unarchived draft instead of retrying
+            // forever or reviving it — re-archiving is the owner's call.
+            setDocs((ds) => ds.map((x) => (x.id === d.id ? { ...x, savedAt: null } : x)))
+            setNotice(`「${d.name || '未命名稿件'}」在云端已被删除，已转为本地稿；需要时点「保存到草稿箱」重新归档`)
+          }
         }
         setDirtyIds((prev) => {
           const next = new Set(prev)
@@ -197,24 +211,53 @@ export function useDocs({ enabled }: Options) {
     }
   }, [docs, activeId, enabled, saveToDraftsMutation, utils])
 
+  /**
+   * Soft delete: the doc leaves the list at once, but the server delete is
+   * deferred by UNDO_DELETE_MS so 撤销 can bring it back untouched. Any queued
+   * auto-save for this doc is dropped too — a save in flight after the delete
+   * would otherwise re-create the row on the server (the save mutation is an
+   * upsert), making a deleted article come back from the dead.
+   */
   const removeDoc = useCallback(
-    async (id: string) => {
+    (id: string) => {
+      const index = docs.findIndex((d) => d.id === id)
+      const doc = docs[index]
+      if (!doc) return
       const rest = docs.filter((d) => d.id !== id)
       const next = rest.length ? rest : [createDoc()]
       setDocs(next)
       if (activeId === id) setActiveId(next[0].id)
       lastSavedRef.current.delete(id)
-      if (enabled) {
-        try {
-          await removeMutation.mutateAsync({ id })
-          await utils.docs.drafts.invalidate()
-        } catch {
-          setNotice('删除没同步到云端，下次打开可能还在')
-        }
-      }
+      pendingRef.current.delete(id)
+      const timer = window.setTimeout(() => {
+        pendingDeletesRef.current.delete(id)
+        if (!enabled) return
+        removeMutation
+          .mutateAsync({ id })
+          .then(() => utils.docs.drafts.invalidate())
+          .catch(() => setNotice('删除没同步到云端，下次打开可能还在'))
+      }, UNDO_DELETE_MS)
+      pendingDeletesRef.current.set(id, { doc, index, timer })
     },
     [docs, activeId, enabled, removeMutation, utils],
   )
+
+  /** Put back a doc deleted within the undo window. Returns false if too late. */
+  const undoRemove = useCallback((id: string): boolean => {
+    const pending = pendingDeletesRef.current.get(id)
+    if (!pending) return false
+    window.clearTimeout(pending.timer)
+    pendingDeletesRef.current.delete(id)
+    setDocs((ds) => {
+      if (ds.some((d) => d.id === id)) return ds
+      const copy = [...ds]
+      copy.splice(Math.min(pending.index, copy.length), 0, pending.doc)
+      return copy
+    })
+    setActiveId(pending.doc.id)
+    if (pending.doc.savedAt !== null) lastSavedRef.current.set(pending.doc.id, pending.doc.content)
+    return true
+  }, [])
 
   const refresh = useCallback(() => {
     void utils.docs.list.invalidate()
@@ -240,6 +283,7 @@ export function useDocs({ enabled }: Options) {
     dirtyCount: dirtyIds.size,
     addDoc,
     removeDoc,
+    undoRemove,
     saveCurrentToDrafts,
     refresh,
   }

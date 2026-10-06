@@ -22,7 +22,7 @@ import {
 import { getTheme } from '@/lib/themes'
 import { cleanHtml, copyPlain, copyRichText, downloadFile, previewPage } from '@/lib/clipboard'
 import { loadSettings, saveSettings, type DocRecord } from '@/lib/store'
-import { useDocs } from '@/hooks/useDocs'
+import { useDocs, UNDO_DELETE_MS } from '@/hooks/useDocs'
 import { CHEATSHEET } from '@/lib/sample'
 import { useAuth } from '@/hooks/useAuth'
 import { trpc } from '@/providers/trpc'
@@ -93,6 +93,7 @@ export default function EditorPage() {
     neverSaved,
     addDoc,
     removeDoc,
+    undoRemove,
     saveCurrentToDrafts,
   } = useDocs({ enabled: isAuthenticated })
 
@@ -345,6 +346,7 @@ export default function EditorPage() {
     if (item.ratio !== ratio) {
       content = setCarouselRatio(content, item.carouselOrdinal, ratio)
     }
+    let okCount = 0
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       // A carousel's slides are consecutive `![` slots in the source. Fill from
@@ -353,7 +355,12 @@ export default function EditorPage() {
       // matched the placeholder text and made every file after the first fail
       // silently.)
       const occurrence = item.occurrence + i
-      if (!canLocateImage(content, item.alt, occurrence)) {
+      // Each slide is addressed by its own caption, not the clicked one:
+      // slides may carry different placeholder text, and checking them all
+      // against the clicked caption refused every file after the first.
+      const slot = materials.find((m) => m.occurrence === occurrence)
+      const staysInCarousel = slot?.kind === '轮播' && slot.carouselOrdinal === item.carouselOrdinal
+      if (!slot || !staysInCarousel || !canLocateImage(content, slot.alt, occurrence)) {
         toast.warning(`${file.name} 没有对应的空位`, {
           description: '这个轮播里已经没有更多占位行，多出的图请手动插入',
         })
@@ -362,7 +369,8 @@ export default function EditorPage() {
       setUploadingKey(`${item.no}-${item.alt}`)
       try {
         const ref = await uploadOne(file, ratio)
-        content = fillImageSrc(content, item.alt, occurrence, ref)
+        content = fillImageSrc(content, slot.alt, occurrence, ref)
+        okCount++
       } catch (e) {
         toast.error(`${file.name} 上传失败`, {
           description: e instanceof Error ? e.message : '请稍后重试',
@@ -372,11 +380,19 @@ export default function EditorPage() {
       }
     }
     updateActive({ content })
+    // Only claim success for slides that actually uploaded; every failure has
+    // already raised its own error toast, so an all-failed batch stays quiet
+    // instead of congratulating itself.
     if (files.length > 1) {
-      toast.success(`${files.length} 张已按 ${ratio} 裁切上传`, {
-        description: '这个轮播里剩下的占位请逐张点上传，会自动沿用同一比例',
-      })
-    } else {
+      if (okCount > 0) {
+        toast.success(
+          okCount === files.length
+            ? `${okCount} 张已按 ${ratio} 裁切上传`
+            : `${okCount}/${files.length} 张已按 ${ratio} 裁切上传`,
+          { description: '这个轮播里剩下的占位请逐张点上传，会自动沿用同一比例' },
+        )
+      }
+    } else if (okCount > 0) {
       toast.success(`${item.no} 已按 ${ratio} 裁切上传并回填`)
     }
   }
@@ -422,7 +438,20 @@ export default function EditorPage() {
         onRename={(name) => updateActive({ name })}
         onSelectDoc={setActiveId}
         onCreateDoc={() => addDoc()}
-        onDeleteDoc={(id) => void removeDoc(id)}
+        onDeleteDoc={(id) => {
+          const name = docs.find((d) => d.id === id)?.name || '未命名稿件'
+          removeDoc(id)
+          toast(`已删除「${name}」`, {
+            description: '10 秒内可以撤销',
+            duration: UNDO_DELETE_MS,
+            action: {
+              label: '撤销',
+              onClick: () => {
+                if (undoRemove(id)) toast.success('已恢复')
+              },
+            },
+          })
+        }}
         syncState={syncState}
         onSaveDraft={() => {
           void saveCurrentToDrafts().then((res) => {
@@ -469,7 +498,7 @@ export default function EditorPage() {
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/6 px-4">
             <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#5C6370]">
               Markdown · 语义源稿
-              <span className="ml-2 normal-case tracking-normal text-[#3D434F]">可拖拽图片上传 · Ctrl/⌘+Space 语法补全</span>
+              <span className="ml-2 normal-case tracking-normal text-[#3D434F]">可拖拽图片上传 · Ctrl/⌘+Space 补全 · ⌘B 加粗 · ⌘K 链接</span>
             </span>
             <Popover>
               <PopoverTrigger asChild>
