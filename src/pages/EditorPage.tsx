@@ -22,6 +22,7 @@ import {
 import { getTheme } from '@/lib/themes'
 import { cleanHtml, copyPlain, copyRichText, downloadFile, previewPage } from '@/lib/clipboard'
 import { loadSettings, saveSettings, type DocRecord } from '@/lib/store'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { useDocs, UNDO_DELETE_MS } from '@/hooks/useDocs'
 import { CHEATSHEET } from '@/lib/sample'
 import { useAuth } from '@/hooks/useAuth'
@@ -33,6 +34,18 @@ function plainTextOf(html: string): string {
   const div = document.createElement('div')
   div.innerHTML = html
   return div.textContent || ''
+}
+
+// 三栏各自的拖拽宽度，跨刷新记住。布局以 panel id 为键；侧栏折叠时它的记录
+// 留着，下次打开先按 defaultSize 恢复。
+const LAYOUT_KEY = 'mopai.layout.v1'
+function loadLayout(): Record<string, number> | undefined {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, number>) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 // img:key → 本站稳定图片地址（复制进公众号后由微信转存）
@@ -71,6 +84,10 @@ interface FrameTask {
 export default function EditorPage() {
   const [settings, setSettings] = useState(loadSettings)
   const [panelOpen, setPanelOpen] = useState(true)
+  // Read once at mount: the group is uncontrolled, later drags come back
+  // through onLayoutChange.
+  const [initialLayout] = useState(loadLayout)
+  const layoutRef = useRef<Record<string, number>>(initialLayout ?? {})
   const [previewWidth, setPreviewWidth] = useState<375 | 677>(375)
   const [copied, setCopied] = useState(false)
   const [uploadingKey, setUploadingKey] = useState<string | null>(null)
@@ -476,83 +493,104 @@ export default function EditorPage() {
         onLogout={logout}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        defaultLayout={initialLayout}
+        onLayoutChange={(layout) => {
+          layoutRef.current = { ...layoutRef.current, ...layout }
+          try {
+            localStorage.setItem(LAYOUT_KEY, JSON.stringify(layoutRef.current))
+          } catch {
+            // 宽度记不住也不碍事
+          }
+        }}
+      >
         {/* 左：Markdown 编辑（支持拖图上传） */}
-        <div
-          className="flex min-w-0 flex-1 flex-col bg-[#14161B]"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault()
-            const files = Array.from(e.dataTransfer.files || [])
-            if (!files.length) return
-            if (!isAuthenticated) {
-              toast.error('上传图片需要先登录', {
-                description: '编辑和复制不需要登录',
-                action: { label: '去登录', onClick: () => navigate('/login') },
-              })
-              return
-            }
-            setFrameTask({ files, mode: 'loose' })
-          }}
-        >
-          <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/6 px-4">
-            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#5C6370]">
-              Markdown · 语义源稿
-              <span className="ml-2 normal-case tracking-normal text-[#3D434F]">可拖拽图片上传 · Ctrl/⌘+Space 补全 · ⌘B 加粗 · ⌘K 链接</span>
-            </span>
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className="rounded-md px-2 py-1 text-[11px] text-[#8A919E] transition-colors hover:bg-white/6 hover:text-white">
-                  语法速查
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 p-0">
-                <p className="border-b border-black/8 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9A9A9A]">
-                  公众号专用语法
-                </p>
-                <ul className="max-h-80 overflow-y-auto p-2">
-                  {CHEATSHEET.map((c) => (
-                    <li key={c.syntax} className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-black/3">
-                      <code className="shrink-0 rounded bg-[#1677FF]/8 px-1.5 py-0.5 font-mono text-[11px] text-[#1677FF]">{c.syntax}</code>
-                      <span className="text-[12px] text-[#555]">{c.desc}</span>
-                    </li>
-                  ))}
-                </ul>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="min-h-0 flex-1">
-            <EditorPane ref={editorRef} value={activeDoc?.content || ''} onChange={(content) => updateActive({ content })} />
-          </div>
-        </div>
-
-        {/* 右：预览 */}
-        <div className="w-[460px] shrink-0 border-l border-black/8 xl:w-[500px]">
-          <PreviewPane html={rendered.html} stats={rendered.stats} width={previewWidth} onWidthChange={setPreviewWidth} />
-        </div>
-
-        {/* 折叠侧栏 */}
-        {panelOpen && (
-          <SidePanel
-            materials={materials}
-            titles={parsed.meta.titles}
-            cover={parsed.meta.cover}
-            sig={settings.sig}
-            onSig={(sig) => setSettings((s) => ({ ...s, sig }))}
-            onJump={(line) => editorRef.current?.jumpToLine(line)}
-            onCopyTitle={(t) => {
-              copyPlain(t)
-              toast.success('标题已复制')
+        <ResizablePanel id="editor" defaultSize="55%" minSize="320px" className="min-w-0">
+          <div
+            className="flex h-full min-w-0 flex-col bg-[#14161B]"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const files = Array.from(e.dataTransfer.files || [])
+              if (!files.length) return
+              if (!isAuthenticated) {
+                toast.error('上传图片需要先登录', {
+                  description: '编辑和复制不需要登录',
+                  action: { label: '去登录', onClick: () => navigate('/login') },
+                })
+                return
+              }
+              setFrameTask({ files, mode: 'loose' })
             }}
-            onUpload={(files, item) => startUpload(files, item)}
-            onClear={clearImage}
-            onRemove={removeImage}
-            onRecrop={(item) => void recropImage(item)}
-            onCarouselRatio={changeCarouselRatio}
-            uploadingKey={uploadingKey}
-          />
+          >
+            <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/6 px-4">
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#5C6370]">
+                Markdown · 语义源稿
+                <span className="ml-2 normal-case tracking-normal text-[#3D434F]">可拖拽图片上传 · Ctrl/⌘+Space 补全 · ⌘B 加粗 · ⌘K 链接</span>
+              </span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="rounded-md px-2 py-1 text-[11px] text-[#8A919E] transition-colors hover:bg-white/6 hover:text-white">
+                    语法速查
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0">
+                  <p className="border-b border-black/8 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9A9A9A]">
+                    公众号专用语法
+                  </p>
+                  <ul className="max-h-80 overflow-y-auto p-2">
+                    {CHEATSHEET.map((c) => (
+                      <li key={c.syntax} className="flex items-baseline gap-3 rounded-md px-2 py-1.5 hover:bg-black/3">
+                        <code className="shrink-0 rounded bg-[#1677FF]/8 px-1.5 py-0.5 font-mono text-[11px] text-[#1677FF]">{c.syntax}</code>
+                        <span className="text-[12px] text-[#555]">{c.desc}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="min-h-0 flex-1">
+              <EditorPane ref={editorRef} value={activeDoc?.content || ''} onChange={(content) => updateActive({ content })} />
+            </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* 中：预览（375/677 是里面手机框的宽度，栏宽随便拖） */}
+        <ResizablePanel id="preview" defaultSize="500px" minSize="380px" maxSize="820px" className="min-w-0 border-l border-black/8">
+          <PreviewPane html={rendered.html} stats={rendered.stats} width={previewWidth} onWidthChange={setPreviewWidth} />
+        </ResizablePanel>
+
+        {/* 右：折叠侧栏 */}
+        {panelOpen && (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel id="sidebar" defaultSize="300px" minSize="240px" maxSize="520px" className="min-w-0">
+              <SidePanel
+                materials={materials}
+                titles={parsed.meta.titles}
+                cover={parsed.meta.cover}
+                sig={settings.sig}
+                onSig={(sig) => setSettings((s) => ({ ...s, sig }))}
+                onJump={(line) => editorRef.current?.jumpToLine(line)}
+                onCopyTitle={(t) => {
+                  copyPlain(t)
+                  toast.success('标题已复制')
+                }}
+                onUpload={(files, item) => startUpload(files, item)}
+                onClear={clearImage}
+                onRemove={removeImage}
+                onRecrop={(item) => void recropImage(item)}
+                onCarouselRatio={changeCarouselRatio}
+                uploadingKey={uploadingKey}
+              />
+            </ResizablePanel>
+          </>
         )}
-      </div>
+      </ResizablePanelGroup>
 
       <RatioPicker
         open={frameTask !== null && manualOpen === false}

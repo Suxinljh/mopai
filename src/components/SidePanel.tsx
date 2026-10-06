@@ -119,7 +119,7 @@ export default function SidePanel(p: Props) {
   )
 
   return (
-    <aside className="flex h-full w-[300px] shrink-0 flex-col border-l border-black/8 bg-white">
+    <aside className="flex h-full w-full flex-col border-l border-black/8 bg-white">
       <input
         ref={fileRef}
         type="file"
