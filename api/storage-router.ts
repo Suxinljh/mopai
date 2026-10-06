@@ -3,8 +3,9 @@ import { TRPCError } from "@trpc/server";
 import { eq, desc } from "drizzle-orm";
 import { createRouter, authedQuery } from "./middleware";
 import { storage } from "./lib/storage";
+import { env } from "./lib/env";
 import { getDb } from "./queries/connection";
-import { files } from "../db/schema";
+import { docs, files } from "../db/schema";
 
 // 单图上限 20MB（base64 约 4/3 倍）
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -60,6 +61,69 @@ export const storageRouter = createRouter({
       .orderBy(desc(files.createdAt))
       .limit(200);
   }),
+
+  /** Storage usage for the materials page. */
+  stats: authedQuery.query(async ({ ctx }) => {
+    const rows = await getDb()
+      .select({ size: files.size, createdAt: files.createdAt })
+      .from(files)
+      .where(eq(files.ownerId, ctx.user.id));
+    const totalBytes = rows.reduce((n, r) => n + (r.size || 0), 0);
+    const oldest = rows.reduce<number | null>(
+      (min, r) => (min === null || r.createdAt.getTime() < min ? r.createdAt.getTime() : min),
+      null,
+    );
+    return {
+      count: rows.length,
+      totalBytes,
+      oldestAt: oldest,
+      quotaBytes: env.storageQuotaBytes,
+    };
+  }),
+
+  /**
+   * Images no longer referenced by any saved 稿件. Deliberately requires the
+   * caller to pass the keys back, so the list shown to the user is exactly the
+   * list that gets deleted.
+   */
+  orphans: authedQuery.query(async ({ ctx }) => {
+    const [rows, savedDocs] = await Promise.all([
+      getDb()
+        .select({ key: files.key, name: files.name, size: files.size, createdAt: files.createdAt })
+        .from(files)
+        .where(eq(files.ownerId, ctx.user.id))
+        .orderBy(desc(files.createdAt)),
+      getDb()
+        .select({ content: docs.content })
+        .from(docs)
+        .where(eq(docs.ownerId, ctx.user.id)),
+    ]);
+    const haystack = savedDocs.map((d) => d.content).join("\n");
+    return rows.filter((r) => !haystack.includes(`img:${r.key}`));
+  }),
+
+  removeOrphans: authedQuery
+    .input(z.object({ keys: z.array(z.string()).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.keys.length === 0) return { deleted: 0, freedBytes: 0 };
+      const rows = await getDb()
+        .select({ key: files.key, size: files.size })
+        .from(files)
+        .where(eq(files.ownerId, ctx.user.id));
+      const owned = new Map(rows.map((r) => [r.key, r.size]));
+
+      let deleted = 0;
+      let freedBytes = 0;
+      for (const key of input.keys) {
+        const size = owned.get(key);
+        if (size === undefined) continue;
+        await storage.deleteFile({ fileKey: key });
+        await getDb().delete(files).where(eq(files.key, key));
+        deleted++;
+        freedBytes += size;
+      }
+      return { deleted, freedBytes };
+    }),
 
   remove: authedQuery
     .input(z.object({ key: z.string() }))

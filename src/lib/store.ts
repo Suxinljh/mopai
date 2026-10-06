@@ -47,6 +47,23 @@ export function saveDocs(docs: DocRecord[], activeId: string) {
   }
 }
 
+/** 当前选中的稿件 id。服务器接管后它只用来记住「上次看的是哪篇」。 */
+export function loadActiveId(): string {
+  try {
+    return localStorage.getItem(ACTIVE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveActiveId(id: string) {
+  try {
+    localStorage.setItem(ACTIVE_KEY, id)
+  } catch {
+    // 忽略
+  }
+}
+
 export function loadSettings(): AppSettings {
   const def: AppSettings = { themeId: 'golden', sig: { layout: 'Yoru', proof: 'Yoru', review: 'Yoru' } }
   try {

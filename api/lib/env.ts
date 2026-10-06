@@ -34,4 +34,8 @@ export const env = {
   // R2 image worker.
   imgBaseUrl: (process.env.IMG_BASE_URL ?? "").replace(/\/+$/, ""),
   imgAdminKey: required("IMG_ADMIN_KEY"),
+
+  // Soft ceiling shown on the materials page. R2's free tier is 10 GB and the
+  // bucket is shared with other projects, so the default leaves headroom.
+  storageQuotaBytes: Number(process.env.STORAGE_QUOTA_BYTES || 2 * 1024 * 1024 * 1024),
 };

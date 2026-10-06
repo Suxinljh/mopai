@@ -19,7 +19,7 @@ export type Block =
   | { type: 'quoteCard'; segs: InlineSeg[] } // > 金句卡片
   | { type: 'quoteBox'; paras: InlineSeg[][] } // :::quote 引文框
   | { type: 'image'; alt: string; src: string; line: number } // ![图注](src)
-  | { type: 'carousel'; title: string; items: CarouselItem[]; line: number } // :::carousel
+  | { type: 'carousel'; title: string; ratio: CarouselRatio; items: CarouselItem[]; line: number } // :::carousel [比例] 标题
   | { type: 'signature' } // @signature
   | { type: 'list'; ordered: boolean; items: InlineSeg[][] }
   | { type: 'code'; lang: string; code: string }
@@ -28,6 +28,23 @@ export type Block =
 export interface CarouselItem {
   alt: string
   src: string
+}
+
+/** Uniform frame every image in one carousel is cropped to at upload time. */
+export const CAROUSEL_RATIOS = ['4:3', '3:4', '16:9', '9:16', '1:1'] as const
+
+export type CarouselRatio = (typeof CAROUSEL_RATIOS)[number]
+
+export const DEFAULT_CAROUSEL_RATIO: CarouselRatio = '4:3'
+
+export function isCarouselRatio(v: string): v is CarouselRatio {
+  return (CAROUSEL_RATIOS as readonly string[]).includes(v)
+}
+
+/** "4:3" -> 4/3, used for cropping and for sizing the frame. */
+export function ratioValue(ratio: string): number {
+  const [w, h] = ratio.split(':').map(Number)
+  return w > 0 && h > 0 ? w / h : 4 / 3
 }
 
 export interface DocMeta {

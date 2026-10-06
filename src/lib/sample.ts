@@ -51,7 +51,7 @@ cover: 主视觉建议用<SAMPLE_COMPANY>平台或活动现场图
 
 同一主题的多张图片可采用横向滑动展示。轮播内图片应先从原图逐张裁成真实统一比例，再嵌入正文；人物、人脸、展板标题和关键信息应完整保留。
 
-:::carousel 同主题 · 真实统一 4:3 轮播示范
+:::carousel 4:3 同主题 · 真实统一 4:3 轮播示范
 ![设备展示示范图]()
 ![团队协作示范图]()
 ![应用场景示范图]()
@@ -73,7 +73,7 @@ export const CHEATSHEET: { syntax: string; desc: string }[] = [
   { syntax: ':::quote … :::', desc: '引文框，可多段' },
   { syntax: ':::center … :::', desc: '居中强调句' },
   { syntax: '![图注说明]()', desc: '图片占位，图号自动' },
-  { syntax: ':::carousel 标题 … :::', desc: '图片轮播，内放多行 ![]()' },
+  { syntax: ':::carousel 4:3 标题 … :::', desc: '图片轮播；4:3/3:4/16:9/9:16/1:1 任选，上传时裁切统一' },
   { syntax: '@signature', desc: '署名块（人员在设置中配置）' },
   { syntax: '<!-- 备注 -->', desc: '编辑备注，不渲染' },
   { syntax: '--- titles: - … ---', desc: 'front matter：标题候选、封面说明' },

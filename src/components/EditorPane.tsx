@@ -11,6 +11,14 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+  type Completion,
+  type CompletionContext,
+} from '@codemirror/autocomplete'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
@@ -18,6 +26,79 @@ import { tags } from '@lezer/highlight'
 export interface EditorHandle {
   jumpToLine: (line: number) => void
   insertText: (text: string) => void
+}
+
+// ---------- 公众号语法 snippets ----------
+// "|" 标记插入后光标落点。模板刻意保持短小，插入后直接就能接着写。
+const SNIPPETS: { label: string; detail: string; template: string }[] = [
+  { label: ':::quote', detail: '引文框', template: ':::quote\n|\n:::\n' },
+  { label: ':::center', detail: '居中强调句', template: ':::center\n|\n:::\n' },
+  { label: ':::carousel', detail: '图片轮播（上传时选画幅比例）', template: ':::carousel 4:3 |\n![]()\n![]()\n:::\n' },
+  { label: ':::结束', detail: '闭合当前模块', template: ':::\n|' },
+  { label: '##KICKER', detail: '章节标题，序号自动编号', template: '## KICKER | |\n' },
+  { label: '###', detail: '次级标题，无序号', template: '### |\n' },
+  { label: '>', detail: '金句卡片', template: '> |\n' },
+  { label: '![]()', detail: '图片占位，图号自动编排', template: '![|]()\n' },
+  { label: '==', detail: '下划线重点', template: '==|==' },
+  { label: '@signature', detail: '署名块（人员在设置里配置）', template: '@signature\n' },
+  { label: '---frontmatter', detail: '标题候选与封面说明', template: '---\ntitles:\n  - |\ncover: \n---\n' },
+  { label: '<!--', detail: '编辑备注，不渲染', template: '<!-- | -->' },
+]
+
+/** Split "a|b" into the text before and after the cursor. */
+function splitTemplate(template: string): { before: string; after: string } {
+  const i = template.indexOf('|')
+  if (i < 0) return { before: template, after: '' }
+  return { before: template.slice(0, i), after: template.slice(i + 1) }
+}
+
+function toCompletion(s: (typeof SNIPPETS)[number]): Completion {
+  const { before, after } = splitTemplate(s.template)
+  return {
+    label: s.label,
+    detail: s.detail,
+    type: 'keyword',
+    apply: (view, _completion, from, to) => {
+      view.dispatch({
+        changes: { from, to, insert: before + after },
+        selection: { anchor: from + before.length },
+      })
+    },
+  }
+}
+
+/**
+ * 只在明显该出语法的时候给建议，避免打字时刷屏：
+ * 行首、已经在 ::: / @ / # / > / ! 里、或者手动按了 Ctrl+Space。
+ */
+function gzhCompletions(context: CompletionContext) {
+  const line = context.state.doc.lineAt(context.pos)
+  const before = line.text.slice(0, context.pos - line.from)
+  // context.explicit 为真表示用户主动按了 Ctrl+Space
+  const manual = context.explicit
+
+  const trimmed = before.trimStart()
+  const atLineStart = trimmed.length === 0
+  const looksLikeSyntax = /^(:{1,3}|@|#{1,3}\s?|>\s?$|!\[?|==)/.test(trimmed)
+
+  if (!atLineStart && !looksLikeSyntax && !manual) return null
+
+  // 匹配光标前的语法前缀，替换掉已输入的部分
+  const word = context.matchBefore(/[:@#!>=\-[\]\w]*/)
+  if (!word) return null
+  if (word.from === word.to && !manual) return null
+
+  // 已经在 ::: 容器里时，把「闭合」排在最前
+  const inContainer = /^\s*:::/.test(before)
+  const options = inContainer
+    ? [...SNIPPETS].sort((a, b) => (a.label === ':::结束' ? -1 : b.label === ':::结束' ? 1 : 0))
+    : SNIPPETS
+
+  return {
+    from: word.from,
+    options: options.map(toCompletion),
+    validFor: /^[:@#!>=\-[\]\w]*$/,
+  }
 }
 
 // 公众号专用语法高亮（暗色编辑器内）
@@ -106,6 +187,34 @@ const editorTheme = EditorView.theme(
     '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#6B7285' },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': { overflow: 'auto' },
+    // 自动补全弹层（跟随暗色编辑器，不用 CodeMirror 默认的浅色）
+    '.cm-tooltip': {
+      backgroundColor: '#1B1E25',
+      border: '1px solid rgba(255,255,255,.12)',
+      borderRadius: '8px',
+      boxShadow: '0 12px 32px rgba(0,0,0,.45)',
+      overflow: 'hidden',
+    },
+    '.cm-tooltip-autocomplete ul': { fontFamily: 'inherit', maxHeight: '260px' },
+    '.cm-tooltip-autocomplete ul li': {
+      padding: '4px 8px',
+      color: '#D8DCE3',
+      fontSize: '12.5px',
+      lineHeight: '1.5',
+    },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': {
+      backgroundColor: 'rgba(22,119,255,.28)',
+      color: '#FFFFFF',
+    },
+    '.cm-completionLabel': { fontFamily: 'ui-monospace, Menlo, Consolas, monospace' },
+    '.cm-completionDetail': {
+      color: '#8A919E',
+      fontStyle: 'normal',
+      marginLeft: '10px',
+      fontSize: '11px',
+    },
+    '.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail': { color: '#C9D4E4' },
+    '.cm-completionMatchedText': { textDecoration: 'none', color: '#7DB4FF', fontWeight: '700' },
   },
   { dark: true },
 )
@@ -141,9 +250,17 @@ const EditorPane = forwardRef<EditorHandle, Props>(function EditorPane({ value, 
         lineNumbers(),
         highlightActiveLine(),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        keymap.of([...completionKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
         markdown({ base: markdownLanguage }),
         syntaxHighlighting(mdHighlight),
+        closeBrackets(),
+        autocompletion({
+          override: [gzhCompletions],
+          activateOnTyping: true,
+          closeOnBlur: true,
+          icons: false,
+          maxRenderedOptions: 12,
+        }),
         editorTheme,
         syntaxDecorations,
         EditorView.updateListener.of((u) => {

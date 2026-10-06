@@ -11,7 +11,7 @@ interface Props {
   onSig: (s: SignatureConfig) => void
   onJump: (line: number) => void
   onCopyTitle: (t: string) => void
-  onUpload: (file: File, item: MaterialItem) => void
+  onUpload: (files: File[], item: MaterialItem) => void
   uploadingKey: string | null
 }
 
@@ -19,13 +19,18 @@ function Label({ children }: { children: React.ReactNode }) {
   return <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9A9A9A]">{children}</p>
 }
 
-export default function SidePanel(p: Props) {
-  const fileRef = useRef<HTMLInputElement>(null)
+export default function SidePanel(p: Props) {  const fileRef = useRef<HTMLInputElement>(null)
   const pendingRef = useRef<MaterialItem | null>(null)
 
   const pick = (item: MaterialItem) => {
     pendingRef.current = item
     fileRef.current?.click()
+  }
+
+  // 一个轮播里已经定下的比例，用于给同轮播的每张图提示
+  const carouselRatio = new Map<number, string>()
+  for (const m of p.materials) {
+    if (m.carouselOrdinal && m.ratio) carouselRatio.set(m.carouselOrdinal, m.ratio)
   }
 
   return (
@@ -34,10 +39,11 @@ export default function SidePanel(p: Props) {
         ref={fileRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f && pendingRef.current) p.onUpload(f, pendingRef.current)
+          const files = Array.from(e.target.files || [])
+          if (files.length && pendingRef.current) p.onUpload(files, pendingRef.current)
           e.target.value = ''
         }}
       />
@@ -70,6 +76,14 @@ export default function SidePanel(p: Props) {
                       >
                         <span className="shrink-0 rounded bg-[#1677FF]/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-[#1677FF]">{m.no}</span>
                         <span className="text-[11px] text-[#9A9A9A]">{m.kind}</span>
+                        {m.kind === '轮播' && m.ratio && (
+                          <span
+                            className="shrink-0 rounded bg-black/5 px-1.5 py-0.5 text-[10px] tabular-nums text-[#555]"
+                            title={`这个轮播统一裁成 ${m.ratio}，同轮播内所有图片必须一致`}
+                          >
+                            {m.ratio}
+                          </span>
+                        )}
                         {m.hasSrc ? (
                           <span className="ml-auto shrink-0 rounded bg-emerald-500/10 px-1.5 text-[10px] text-emerald-600">已传图</span>
                         ) : (
@@ -85,6 +99,13 @@ export default function SidePanel(p: Props) {
                       </button>
                     </div>
                     <p className="mt-1 text-[12px] leading-relaxed text-[#333]">{m.desc}</p>
+                    {m.carouselOrdinal && (
+                      <p className="mt-1 text-[11px] leading-relaxed text-[#9A9A9A]">
+                        {m.hasSrc
+                          ? `轮播 ${m.carouselOrdinal} · 统一 ${m.ratio}`
+                          : `轮播 ${m.carouselOrdinal} · 点上传时选比例，同一轮播共用`}
+                      </p>
+                    )}
                   </li>
                 )
               })}

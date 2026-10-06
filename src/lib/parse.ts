@@ -2,7 +2,8 @@ import MarkdownIt from 'markdown-it'
 import type { Token } from 'markdown-it'
 import markdownItMark from 'markdown-it-mark'
 import markdownItContainer from 'markdown-it-container'
-import type { Block, Doc, DocMeta, InlineSeg } from './types'
+import type { Block, CarouselRatio, Doc, DocMeta, InlineSeg } from './types'
+import { DEFAULT_CAROUSEL_RATIO, isCarouselRatio } from './types'
 
 // ---------- front matter ----------
 // 只支持简单键值与列表，刻意不引入 YAML 依赖：
@@ -221,7 +222,19 @@ export function parseMarkdown(src: string): Doc {
     }
 
     if (t.type === 'container_carousel_open') {
-      const title = (t.info || '').replace(/^carousel\s*/, '').trim()
+      // :::carousel [比例] 标题 —— 比例可省略，老稿件照旧按默认比例渲染
+      let rest = (t.info || '').replace(/^carousel\s*/, '').trim()
+      let ratio: CarouselRatio = DEFAULT_CAROUSEL_RATIO
+      const ratioMatch = rest.match(/^(\d+\s*:\s*\d+)\s*/)
+      if (ratioMatch) {
+        const candidate = ratioMatch[1].replace(/\s+/g, '')
+        // 只吃下确实是受支持的比例；「7:5 说明」这种要原样留在标题里
+        if (isCarouselRatio(candidate)) {
+          ratio = candidate
+          rest = rest.slice(ratioMatch[0].length).trim()
+        }
+      }
+      const title = rest
       const items: { alt: string; src: string }[] = []
       i++
       while (i < tokens.length && tokens[i].type !== 'container_carousel_close') {
@@ -233,7 +246,7 @@ export function parseMarkdown(src: string): Doc {
         }
         i++
       }
-      blocks.push({ type: 'carousel', title, items, line: t.map?.[0] ?? 0 })
+      blocks.push({ type: 'carousel', title, ratio, items, line: t.map?.[0] ?? 0 })
       continue
     }
 

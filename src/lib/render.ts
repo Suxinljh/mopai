@@ -1,4 +1,4 @@
-import type { Block, Doc, InlineSeg, RenderStats, SignatureConfig } from './types'
+import type { Block, CarouselRatio, Doc, InlineSeg, RenderStats, SignatureConfig } from './types'
 import { BLANK, esc, type Theme } from './themes'
 
 // 盒式模块的前后空行由 pushBlock(boxed=true) 统一插入
@@ -82,7 +82,7 @@ export function renderDoc(
         images += b.items.length
         if (b.items.length < 2) warnings.push('轮播至少需要 2 张图片')
         const caption = `图${imageNo} ${b.title || '多图轮播'}（共 ${b.items.length} 张）`
-        pushBlock(theme.carousel(b.title, caption, b.items), true)
+        pushBlock(theme.carousel(b.title, caption, b.items, b.ratio), true)
         break
       }
       case 'signature':
@@ -132,17 +132,23 @@ export interface MaterialItem {
   alt: string // Markdown 中的 alt，用于上传后定位回填
   hasSrc: boolean
   line: number
+  /** Set for carousel items: every image in one carousel shares this frame. */
+  ratio?: CarouselRatio
+  /** Index of the carousel block, so the UI can group items of the same carousel. */
+  carouselOrdinal?: number
 }
 
 export function collectMaterials(doc: Doc): MaterialItem[] {
   const out: MaterialItem[] = []
   let imageNo = 0
+  let carouselNo = 0
   for (const b of doc.blocks) {
     if (b.type === 'image') {
       imageNo++
       out.push({ no: `图${imageNo}`, kind: '单图', desc: b.alt || '未命名图片', alt: b.alt, hasSrc: !!b.src, line: b.line })
     } else if (b.type === 'carousel') {
       imageNo++
+      carouselNo++
       b.items.forEach((it, idx) => {
         out.push({
           no: `图${imageNo}-${idx + 1}`,
@@ -151,6 +157,8 @@ export function collectMaterials(doc: Doc): MaterialItem[] {
           alt: it.alt,
           hasSrc: !!it.src,
           line: b.line,
+          ratio: b.ratio,
+          carouselOrdinal: carouselNo,
         })
       })
     }
@@ -173,6 +181,38 @@ export function fillImageSrc(content: string, alt: string, approxLine: number, s
     return lines.join('\n')
   }
   return content
+}
+
+/**
+ * Write the chosen frame ratio into the `:::carousel` opener of a given carousel.
+ * The opener carries `:::carousel [比例] 标题`; a later `:::carousel-open` marker
+ * found after an earlier ratio belongs to a different carousel.
+ */
+export function setCarouselRatio(
+  content: string,
+  occurrence: number,
+  ratio: CarouselRatio,
+): string {
+  const lines = content.split('\n')
+  const openers: number[] = []
+  const OPEN = /^(\s*:::carousel(?:-open)?)(?![-\w])/
+  for (let i = 0; i < lines.length; i++) {
+    if (!OPEN.test(lines[i])) continue
+    // 在遇到本行之前，若最近一个 :::carousel-close 之后已经有开启器，则该行不是新轮播
+    const since = openers.length ? openers[openers.length - 1] : -1
+    let hasClose = false
+    for (let j = since; j < i; j++) {
+      if (/^\s*:::carousel-close\s*$/.test(lines[j])) hasClose = true
+    }
+    if (!hasClose) openers.push(i)
+  }
+  const target = openers[occurrence - 1]
+  if (target === undefined) return content
+  lines[target] = lines[target].replace(
+    /^(\s*:::carousel(?:-open)?)(?![-\w])\s*(?:\d+\s*:\s*\d+)?\s*/,
+    (_m, head: string) => `${head} ${ratio} `,
+  )
+  return lines.join('\n')
 }
 
 export { esc }

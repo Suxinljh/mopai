@@ -1,10 +1,11 @@
 // Throwaway: render the sample doc with all three themes and assert the
 // WeChat platform red lines. Bundled by esbuild so it can import src/lib/*.
 import { parseMarkdown } from '../src/lib/parse'
-import { renderDoc } from '../src/lib/render'
-import { THEMES } from '../src/lib/themes'
+import { renderDoc, setCarouselRatio } from '../src/lib/render'
+import { THEMES, carouselFrame } from '../src/lib/themes'
 import { previewPage, cleanHtml } from '../src/lib/clipboard'
 import { SAMPLE_DOC } from '../src/lib/sample'
+import { CAROUSEL_RATIOS, DEFAULT_CAROUSEL_RATIO } from '../src/lib/types'
 import fs from 'node:fs'
 
 const OUT = process.env.MOPAI_VERIFY_OUT || './verify-out'
@@ -126,6 +127,55 @@ for (const theme of THEMES) {
 
   const noSrc = renderDoc(parseMarkdown(`![待补图]()\n`), THEMES[0], sig, resolveImg).html
   check('protocol', 'empty src yields placeholder paragraph only', !/<img /.test(noSrc) && noSrc.includes('图1 待补图'))
+}
+
+// --- carousel aspect ratios -------------------------------------------------
+{
+  console.log('\n=== carousel ratios ===')
+  const withRatio = (r: string) =>
+    `:::carousel ${r} 演示\n![A](img:a.png)\n![B](img:b.png)\n:::\n`
+  const placeholders = (r: string) => `:::carousel ${r} 演示\n![A]()\n![B]()\n:::\n`
+
+  for (const r of CAROUSEL_RATIOS) {
+    const f = carouselFrame(r)
+    const html = renderDoc(parseMarkdown(withRatio(r)), THEMES[0], sig, resolveImg).html
+    const dims = new RegExp(`width="${f.width}" height="${f.height}"`, 'g')
+    const found = (html.match(dims) || []).length
+    check(r, 'every image carries the frame width/height attributes', found === 2, `${found}/2`)
+    check(r, 'height:auto keeps the ratio when WeChat shrinks the width', /width:\d+px;height:auto/.test(html))
+    const ph = renderDoc(parseMarkdown(placeholders(r)), THEMES[0], sig, resolveImg).html
+    const phFrame = new RegExp(`width:${f.width}px;height:${f.height}px`, 'g')
+    check(r, 'placeholder box uses the same frame', (ph.match(phFrame) || []).length === 2)
+    // 宽高比真的对得上
+    const implied = f.width / f.height
+    const target = Number(r.split(':')[0]) / Number(r.split(':')[1])
+    check(r, 'frame width/height matches the requested ratio', Math.abs(implied - target) < 0.02,
+      `${f.width}x${f.height} vs ${r}`)
+  }
+
+  // 老稿件没写比例，必须照旧能渲染
+  const legacy = renderDoc(
+    parseMarkdown(`:::carousel 老稿\n![A](img:a.png)\n:::\n`),
+    THEMES[0], sig, resolveImg,
+  ).html
+  const dflt = carouselFrame(DEFAULT_CAROUSEL_RATIO)
+  check('legacy', 'carousel without a ratio falls back to the default frame',
+    legacy.includes(`width="${dflt.width}" height="${dflt.height}"`))
+
+  // 无法识别的比例不能把标题吃掉
+  const weird = renderDoc(parseMarkdown(`:::carousel 7:5 奇怪的比例\n![A](img:a.png)\n:::\n`), THEMES[0], sig, resolveImg).html
+  check('legacy', 'unknown ratio is kept as part of the title',
+    weird.includes('7:5 奇怪的比例') && weird.includes(`width="${dflt.width}" height="${dflt.height}"`))
+
+  // 写回比例：只改目标轮播，别动别的
+  const two = `:::carousel 4:3 第一个\n![A]()\n:::\n\n正文\n\n:::carousel 1:1 第二个\n![B]()\n:::\n`
+  const rewritten = setCarouselRatio(two, 2, '16:9')
+  check('rewrite', 'second carousel gets the new ratio', rewritten.includes(':::carousel 16:9 第二个'))
+  check('rewrite', 'first carousel is untouched', rewritten.includes(':::carousel 4:3 第一个'))
+  const first = setCarouselRatio(two, 1, '9:16')
+  check('rewrite', 'first carousel gets the new ratio', first.includes(':::carousel 9:16 第一个'))
+  check('rewrite', 'second carousel is untouched', first.includes(':::carousel 1:1 第二个'))
+  check('rewrite', 'out-of-range occurrence is a no-op', setCarouselRatio(two, 9, '1:1') === two)
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`)

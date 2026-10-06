@@ -17,6 +17,9 @@ interface Props {
   onRename: (name: string) => void
   onSelectDoc: (id: string) => void
   onCreateDoc: () => void
+  onDeleteDoc: (id: string) => void
+  syncState: 'loading' | 'synced' | 'saving' | 'local' | 'error'
+  onOpenMaterials: () => void
   themeId: string
   onTheme: (id: string) => void
   miniPreview: (themeId: string) => string
@@ -34,6 +37,14 @@ const THEME_DOT: Record<string, string> = {
   golden: '#1677FF',
   minimal: '#111111',
   steady: '#1F4E8C',
+}
+
+const SYNC_LABEL: Record<Props['syncState'], { text: string; className: string; title: string }> = {
+  loading: { text: '读取中', className: 'text-[#9A9A9A]', title: '正在从云端读取稿件' },
+  saving: { text: '保存中', className: 'text-[#1677FF]', title: '正在写入云端' },
+  synced: { text: '已同步', className: 'text-emerald-600', title: '稿件已保存到账号，换设备也能打开' },
+  local: { text: '仅本机', className: 'text-amber-600', title: '未登录：稿件只存在这个浏览器里' },
+  error: { text: '未同步', className: 'text-[#D93F3F]', title: '云端写入失败，本地改动仍保留' },
 }
 
 export default function TopBar(p: Props) {
@@ -63,11 +74,25 @@ export default function TopBar(p: Props) {
                 <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-64">
               {p.docs.map((d) => (
                 <DropdownMenuItem key={d.id} onSelect={() => p.onSelectDoc(d.id)} className="flex items-center justify-between gap-2">
                   <span className="truncate">{d.name || '未命名稿件'}</span>
-                  {d.id === p.activeId && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#1677FF' }} />}
+                  <span className="ml-auto flex shrink-0 items-center gap-1">
+                    {d.id === p.activeId && <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#1677FF' }} />}
+                    {p.docs.length > 1 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (window.confirm(`删掉「${d.name || '未命名稿件'}」？这一步不能撤销。`)) p.onDeleteDoc(d.id)
+                        }}
+                        className="rounded px-1 text-[11px] text-[#9A9A9A] transition-colors hover:bg-black/5 hover:text-[#D93F3F]"
+                        title="删除这篇稿件"
+                      >
+                        删除
+                      </button>
+                    )}
+                  </span>
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
@@ -75,6 +100,12 @@ export default function TopBar(p: Props) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <span
+          className={`shrink-0 text-[11px] tabular-nums ${SYNC_LABEL[p.syncState].className}`}
+          title={SYNC_LABEL[p.syncState].title}
+        >
+          {SYNC_LABEL[p.syncState].text}
+        </span>
       </div>
 
       <div className="flex-1" />
@@ -124,6 +155,14 @@ export default function TopBar(p: Props) {
 
       {/* 右：动作区 */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={p.onOpenMaterials}
+          className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16"
+          title="查看图片用量、清理没在用的旧图"
+        >
+          素材库
+        </button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="rounded-lg border border-black/8 bg-white px-3 py-1.5 text-[13px] text-[#333] transition-colors hover:border-black/16">

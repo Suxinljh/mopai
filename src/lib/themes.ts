@@ -1,4 +1,4 @@
-import type { InlineSeg, SignatureConfig } from './types'
+import type { CarouselRatio, InlineSeg, SignatureConfig } from './types'
 
 // 主题 = 一组「语义节点 → 内联样式 HTML」的模板函数。
 // 新主题只新增本文件中的一个对象，稿件与解析层不变。
@@ -18,7 +18,7 @@ export interface Theme {
   quoteCard(inner: string): string
   quoteBox(paras: string[]): string
   imageBlock(src: string, caption: string): string
-  carousel(title: string, caption: string, items: { src: string; alt: string }[]): string
+  carousel(title: string, caption: string, items: { src: string; alt: string }[], ratio: CarouselRatio): string
   signature(cfg: SignatureConfig): string
   listBlock(ordered: boolean, items: string[]): string
   codeBlock(lang: string, code: string): string
@@ -29,6 +29,32 @@ export const BLANK = '<p style="margin:0;"><span leaf="">&nbsp;</span></p>'
 
 export function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+// ---------- 轮播画框 ----------
+// 同一轮播里的图片在上传时就被裁成同一比例，所以这里可以直接给出确定宽高。
+// 用 width + height + height:auto：公众号会把 width 压到可用宽度，height:auto
+// 让高度跟着属性里的固有比例走，画框比例在任何宽度下都不变。
+const CAROUSEL_MAX_W = 240
+const CAROUSEL_MAX_H = 240
+
+export interface CarouselFrame {
+  width: number
+  height: number
+  cropWidth: number
+  cropHeight: number
+}
+
+export function carouselFrame(ratio: CarouselRatio): CarouselFrame {
+  const [rw, rh] = ratio.split(':').map(Number)
+  let width = CAROUSEL_MAX_W
+  let height = Math.round((width * rh) / rw)
+  if (height > CAROUSEL_MAX_H) {
+    height = CAROUSEL_MAX_H
+    width = Math.round((height * rw) / rh)
+  }
+  // 按 3 倍屏取裁切尺寸，缩放后仍然清晰
+  return { width, height, cropWidth: width * 3, cropHeight: height * 3 }
 }
 
 // ---------- golden：亮蓝科技风，与示范稿逐段一致 ----------
@@ -46,14 +72,16 @@ function goldenSeg(s: InlineSeg): string {
   return inner
 }
 
-function goldenCarouselItem(it: { src: string; alt: string }, last: boolean): string {
+function goldenCarouselItem(it: { src: string; alt: string }, last: boolean, ratio: CarouselRatio): string {
+  const f = carouselFrame(ratio)
+  const frame = `width:${f.width}px;height:${f.height}px`
   const img = it.src
-    ? `<img src="${esc(it.src)}" style="display:block;width:240px;height:auto;border-radius:8px;border:1px solid #E6EDF6;background:#F6FAFF;" />`
-    : `<section style="width:240px;height:180px;box-sizing:border-box;border:1px dashed #B9DAFF;background:#F6FAFF;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:#888888;text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
+    ? `<img src="${esc(it.src)}" width="${f.width}" height="${f.height}" style="display:block;width:${f.width}px;height:auto;border-radius:8px;border:1px solid #E6EDF6;background:#F6FAFF;" />`
+    : `<section style="${frame};box-sizing:border-box;border:1px dashed #B9DAFF;background:#F6FAFF;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:#888888;text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
   const cap = it.alt
     ? `<p style="margin:8px 0 0;font-size:12px;line-height:1.5;letter-spacing:0.5px;text-align:center;text-indent:0;color:#888888;"><span leaf="">${esc(it.alt)}</span></p>`
     : ''
-  return `<section style="display:inline-block;vertical-align:top;width:240px;margin-right:${last ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
+  return `<section style="display:inline-block;vertical-align:top;width:${f.width}px;margin-right:${last ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
 }
 
 export const goldenTheme: Theme = {
@@ -100,14 +128,14 @@ export const goldenTheme: Theme = {
       ? `<p style="margin:24px 0 8px;text-align:center;text-indent:0;"><img src="${esc(src)}" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #E6EDF6;" /></p><p style="margin:8px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#888888;"><span leaf="">${esc(caption)}</span></p>`
       : `<p style="margin:24px 0;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#888888;"><span leaf="">${esc(caption)}</span></p>`,
 
-  carousel: (title, caption, items) => {
+  carousel: (title, caption, items, ratio) => {
     const head = `<section style="margin:0;">${
       title
         ? `<p style="margin:0 0 10px;font-size:15px;line-height:1.75;letter-spacing:1px;text-align:center;text-indent:0;color:#1677FF;font-weight:700;"><span style="border-bottom:2px solid #B9DAFF;"><span leaf="">${esc(title)}</span></span></p>`
         : ''
     }<p style="margin:0 0 14px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#888888;"><span leaf="">← 左右滑动查看图片 →</span></p></section>`
     const body = `<section style="margin:0;padding:0 0 6px;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;">${items
-      .map((it, i) => goldenCarouselItem(it, i === items.length - 1))
+      .map((it, i) => goldenCarouselItem(it, i === items.length - 1, ratio))
       .join('')}</section>`
     const cap = `<p style="margin:12px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#888888;"><span leaf="">${esc(caption)}</span></p>`
     return head + body + cap
@@ -184,7 +212,8 @@ export const minimalTheme: Theme = {
       ? `<p style="margin:28px 0 8px;text-align:center;text-indent:0;"><img src="${esc(src)}" style="display:block;width:100%;height:auto;" /></p><p style="margin:8px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#9A9A9A;"><span leaf="">${esc(caption)}</span></p>`
       : `<p style="margin:24px 0;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#9A9A9A;"><span leaf="">${esc(caption)}</span></p>`,
 
-  carousel: (title, caption, items) => {
+  carousel: (title, caption, items, ratio) => {
+    const f = carouselFrame(ratio)
     const head = `<section style="margin:0;">${
       title
         ? `<p style="margin:0 0 10px;font-size:15px;line-height:1.75;letter-spacing:1px;text-align:center;text-indent:0;color:#111111;font-weight:700;"><span leaf="">${esc(title)}</span></p>`
@@ -193,12 +222,12 @@ export const minimalTheme: Theme = {
     const body = `<section style="margin:0;padding:0 0 6px;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;">${items
       .map((it, i) => {
         const img = it.src
-          ? `<img src="${esc(it.src)}" style="display:block;width:240px;height:auto;" />`
-          : `<section style="width:240px;height:180px;box-sizing:border-box;border:1px dashed #DDDDDD;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:#9A9A9A;text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
+          ? `<img src="${esc(it.src)}" width="${f.width}" height="${f.height}" style="display:block;width:${f.width}px;height:auto;" />`
+          : `<section style="width:${f.width}px;height:${f.height}px;box-sizing:border-box;border:1px dashed #DDDDDD;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:#9A9A9A;text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
         const cap = it.alt
           ? `<p style="margin:8px 0 0;font-size:12px;line-height:1.5;letter-spacing:0.5px;text-align:center;text-indent:0;color:#9A9A9A;"><span leaf="">${esc(it.alt)}</span></p>`
           : ''
-        return `<section style="display:inline-block;vertical-align:top;width:240px;margin-right:${i === items.length - 1 ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
+        return `<section style="display:inline-block;vertical-align:top;width:${f.width}px;margin-right:${i === items.length - 1 ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
       })
       .join('')}</section>`
     const cap = `<p style="margin:12px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#9A9A9A;"><span leaf="">${esc(caption)}</span></p>`
@@ -282,7 +311,8 @@ export const steadyTheme: Theme = {
       ? `<p style="margin:26px 0 8px;text-align:center;text-indent:0;"><img src="${esc(src)}" style="display:block;width:100%;height:auto;border:1px solid #E4E9F0;" /></p><p style="margin:8px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#8C9BB3;"><span leaf="">${esc(caption)}</span></p>`
       : `<p style="margin:24px 0;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#8C9BB3;"><span leaf="">${esc(caption)}</span></p>`,
 
-  carousel: (title, caption, items) => {
+  carousel: (title, caption, items, ratio) => {
+    const f = carouselFrame(ratio)
     const head = `<section style="margin:0;">${
       title
         ? `<p style="margin:0 0 10px;font-size:15px;line-height:1.8;letter-spacing:2px;text-align:center;text-indent:0;color:#1F4E8C;font-weight:700;"><span leaf="">${esc(title)}</span></p>`
@@ -291,12 +321,12 @@ export const steadyTheme: Theme = {
     const body = `<section style="margin:0;padding:0 0 6px;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;">${items
       .map((it, i) => {
         const img = it.src
-          ? `<img src="${esc(it.src)}" style="display:block;width:240px;height:auto;border:1px solid #E4E9F0;" />`
-          : `<section style="width:240px;height:180px;box-sizing:border-box;border:1px dashed #C7D8EC;background:#F7F8FA;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:#8C9BB3;text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
+          ? `<img src="${esc(it.src)}" width="${f.width}" height="${f.height}" style="display:block;width:${f.width}px;height:auto;border:1px solid #E4E9F0;" />`
+          : `<section style="width:${f.width}px;height:${f.height}px;box-sizing:border-box;border:1px dashed #C7D8EC;background:#F7F8FA;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:#8C9BB3;text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
         const cap = it.alt
           ? `<p style="margin:8px 0 0;font-size:12px;line-height:1.5;letter-spacing:0.5px;text-align:center;text-indent:0;color:#8C9BB3;"><span leaf="">${esc(it.alt)}</span></p>`
           : ''
-        return `<section style="display:inline-block;vertical-align:top;width:240px;margin-right:${i === items.length - 1 ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
+        return `<section style="display:inline-block;vertical-align:top;width:${f.width}px;margin-right:${i === items.length - 1 ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
       })
       .join('')}</section>`
     const cap = `<p style="margin:12px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:#8C9BB3;"><span leaf="">${esc(caption)}</span></p>`

@@ -14,6 +14,22 @@ export const files = sqliteTable("files", {
 
 export type FileRow = typeof files.$inferSelect;
 
+// 稿件。以前只存在浏览器 localStorage，换台设备就没了。
+export const docs = sqliteTable("docs", {
+  id: text("id").primaryKey(),
+  ownerId: integer("ownerId").notNull(),
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export type DocRow = typeof docs.$inferSelect;
+
 /**
  * Single-owner deployment: the app authenticates with one access key, so there
  * is no user table. This shape is kept so upload code can keep referring to

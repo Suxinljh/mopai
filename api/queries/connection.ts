@@ -20,7 +20,7 @@ function openDatabase(): DatabaseSync {
   const file = resolveDbPath()
   fs.mkdirSync(path.dirname(file), { recursive: true })
   const db = new DatabaseSync(file)
-  // One table, created on first use — no migration tooling needed at this size.
+  // Tables, created on first use — no migration tooling needed at this size.
   db.exec(`
     CREATE TABLE IF NOT EXISTS files (
       key TEXT PRIMARY KEY,
@@ -29,6 +29,18 @@ function openDatabase(): DatabaseSync {
       size INTEGER NOT NULL,
       createdAt INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS docs (
+      id TEXT PRIMARY KEY,
+      ownerId INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS docs_owner_updated
+      ON docs (ownerId, updatedAt DESC);
   `)
   return db
 }
