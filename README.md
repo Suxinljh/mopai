@@ -113,6 +113,14 @@ Cloudflare 脚本从 WSL 执行并读取 `~/.config/codex/private.env` 里的 `C
 wsl -e bash scripts/cf-create-access.sh
 ```
 
+往服务器推脚本时用 `scripts/stage-to-tokyo.sh`，不要直接用 PowerShell 管道：
+
+```bash
+wsl -e bash scripts/stage-to-tokyo.sh 'E:\...\scripts\server-install-release.sh' /tmp/install.sh
+```
+
+PowerShell 管道会把末尾换行转成 CRLF，bash 会在最后一行报 `$'\r': command not found`。上面的脚本走 Windows → WSL → ssh，字节原样过去，并在远端复查 CR 数量。
+
 ## 公众号兼容红线
 
 改动渲染层时必须守住，`npm run verify:themes` 会逐条机器校验：

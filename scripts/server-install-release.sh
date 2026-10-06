@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# Install the uploaded release into /opt/mopai/app and start the services.
+# Install an uploaded release into /opt/mopai/app and restart the services.
+#
+#   server-install-release.sh [path-to-tarball]   (default /tmp/mopai-release.tar.gz)
+#
+# The tarball is left in place so a re-run does not need a re-upload; pass
+# --clean to remove it afterwards.
 set -euo pipefail
 
-echo "== extract release =="
-cd /tmp
+RELEASE="${1:-/tmp/mopai-release.tar.gz}"
+if [ "${RELEASE}" = "--clean" ]; then RELEASE=/tmp/mopai-release.tar.gz; fi
+
+if [ ! -f "$RELEASE" ]; then
+  echo "release not found: $RELEASE" >&2
+  exit 1
+fi
+
+echo "== extract $RELEASE =="
 rm -rf /tmp/mopai-extract
 mkdir -p /tmp/mopai-extract
-tar -xzf /tmp/mopai-release.tar.gz -C /tmp/mopai-extract
+tar -xzf "$RELEASE" -C /tmp/mopai-extract
+test -f /tmp/mopai-extract/dist/boot.js || { echo "tarball has no dist/boot.js" >&2; exit 1; }
 ls -la /tmp/mopai-extract/dist
 
 echo "== install into /opt/mopai/app =="
@@ -20,8 +33,11 @@ sudo ls -la /opt/mopai/app
 echo "dist:"
 sudo ls -la /opt/mopai/app/dist
 
-echo "== enable and start app =="
-sudo systemctl enable --now mopai.service
+echo "== enable and restart app =="
+sudo systemctl enable mopai.service
+# restart, not "enable --now": the unit is already running and would otherwise
+# keep serving the previous bundle from memory
+sudo systemctl restart mopai.service
 sleep 5
 sudo systemctl is-active mopai.service || true
 echo "--- status ---"
@@ -34,6 +50,6 @@ curl -4 -sS -m 10 -o /dev/null -w "GET / -> %{http_code}\n" http://127.0.0.1:310
 curl -4 -sS -m 10 -H "Accept: text/html" -o /dev/null -w "GET /login -> %{http_code}\n" http://127.0.0.1:3100/login || true
 curl -4 -sS -m 10 -o /dev/null -w "GET /api/trpc/auth.me -> %{http_code}\n" http://127.0.0.1:3100/api/trpc/auth.me || true
 
-echo "== clean staging =="
-rm -rf /tmp/mopai-extract /tmp/mopai-release.tar.gz /tmp/bootstrap.sh
+echo "== clean extract dir =="
+rm -rf /tmp/mopai-extract
 echo done
