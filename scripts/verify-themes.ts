@@ -6,6 +6,7 @@ import { THEMES, carouselFrame } from '../src/lib/themes'
 import { previewPage, cleanHtml } from '../src/lib/clipboard'
 import { SAMPLE_DOC } from '../src/lib/sample'
 import { CAROUSEL_RATIOS, DEFAULT_CAROUSEL_RATIO } from '../src/lib/types'
+import { manualOutputSize } from '../src/lib/image'
 import fs from 'node:fs'
 
 const OUT = process.env.MOPAI_VERIFY_OUT || './verify-out'
@@ -179,6 +180,38 @@ for (const theme of THEMES) {
   check('rewrite', 'first carousel gets the new ratio', first.includes(':::carousel 9:16 第一个'))
   check('rewrite', 'second carousel is untouched', first.includes(':::carousel 1:1 第二个'))
   check('rewrite', 'out-of-range occurrence is a no-op', setCarouselRatio(two, 9, '1:1') === two)
+}
+
+// --- manual crop sizing -----------------------------------------------------
+{
+  console.log('\n=== manual crop sizing ===')
+  // A carousel slide must come out at the frame ratio regardless of what the
+  // user dragged, and the output width must match the automatic crop so slides
+  // line up whichever route produced them.
+  for (const r of CAROUSEL_RATIOS) {
+    const f = carouselFrame(r)
+    const out = manualOutputSize({ width: 3000, height: 2000 }, { ratio: r, targetWidth: f.cropWidth })
+    check(r, 'manual crop matches the automatic frame size',
+      out.width === f.cropWidth && out.height === f.cropHeight, `${out.width}x${out.height} vs ${f.cropWidth}x${f.cropHeight}`)
+  }
+
+  // Free crop keeps the dragged shape.
+  const free = manualOutputSize({ width: 1200, height: 900 }, { ratio: null, targetWidth: 720 })
+  check('free', 'free crop keeps the dragged aspect', Math.abs(free.width / free.height - 1200 / 900) < 0.01,
+    `${free.width}x${free.height}`)
+
+  // Never upscale: a small selection stays small.
+  const small = manualOutputSize({ width: 100, height: 75 }, { ratio: '4:3', targetWidth: 720 })
+  check('free', 'a small selection is not upscaled', small.width === 100, `${small.width}x${small.height}`)
+
+  const tiny = manualOutputSize({ width: 10, height: 10 }, { ratio: null, targetWidth: 720 })
+  check('free', 'a degenerate selection still yields at least 1px',
+    tiny.width >= 1 && tiny.height >= 1, `${tiny.width}x${tiny.height}`)
+
+  // Portrait free crop would be enormous at natural size, so it is capped.
+  const portrait = manualOutputSize({ width: 2000, height: 4000 }, { ratio: null, targetWidth: 720 })
+  check('free', 'portrait free crop is capped by the target width',
+    portrait.width === 720 && portrait.height === 1440, `${portrait.width}x${portrait.height}`)
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`)

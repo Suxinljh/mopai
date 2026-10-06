@@ -7,6 +7,7 @@ import EditorPane, { type EditorHandle } from '@/components/EditorPane'
 import PreviewPane from '@/components/PreviewPane'
 import SidePanel from '@/components/SidePanel'
 import RatioPicker from '@/components/RatioPicker'
+import ManualCropper from '@/components/ManualCropper'
 import { parseMarkdown } from '@/lib/parse'
 import {
   renderDoc,
@@ -54,6 +55,8 @@ interface FrameTask {
   item?: MaterialItem
   /** Ratio already fixed by the carousel, if it has one. */
   locked?: CarouselRatio
+  /** Ratio chosen in the picker, carried over to the manual cropper. */
+  ratio?: CarouselRatio | null
 }
 
 export default function EditorPage() {
@@ -63,6 +66,7 @@ export default function EditorPage() {
   const [copied, setCopied] = useState(false)
   const [uploadingKey, setUploadingKey] = useState<string | null>(null)
   const [frameTask, setFrameTask] = useState<FrameTask | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
   const editorRef = useRef<EditorHandle>(null)
   const navigate = useNavigate()
   const { user, isAuthenticated, logout } = useAuth()
@@ -123,7 +127,7 @@ export default function EditorPage() {
     toast.success(kind === 'clean' ? '已导出干净正文 HTML' : '已导出预览页 HTML')
   }
 
-  /** Upload one file, optionally cropping to a carousel frame first. */
+  /** Upload one file, optionally auto-cropping to a carousel frame first. */
   const uploadOne = async (file: File, ratio?: CarouselRatio) => {
     const payload = ratio ? await cropToRatio(file, ratio) : null
     const contentBase64 = payload
@@ -136,6 +140,17 @@ export default function EditorPage() {
       name: uploadName,
       contentBase64,
       contentType: payload ? payload.mime : file.type,
+    })
+    return `img:${res.key}`
+  }
+
+  /** Upload an already-cropped blob produced by the manual cropper. */
+  const uploadBlob = async (blob: Blob, mime: string, originalName: string) => {
+    const contentBase64 = await blobToBase64(blob)
+    const res = await uploadMutation.mutateAsync({
+      name: filenameForMime(originalName, mime),
+      contentBase64,
+      contentType: mime,
     })
     return `img:${res.key}`
   }
@@ -167,6 +182,33 @@ export default function EditorPage() {
       } finally {
         setUploadingKey(null)
       }
+    }
+  }
+
+  /** Result of the manual cropper: a blob instead of the original file. */
+  const uploadCroppedBlob = async (blob: Blob, mime: string, task: FrameTask) => {
+    const file = task.files[0]
+    if (!file) return
+    const label = task.item?.no ?? file.name
+    setUploadingKey(task.item ? `${task.item.no}-${task.item.alt}` : `drop-${file.name}`)
+    try {
+      const ref = await uploadBlob(blob, mime, file.name)
+      if (task.mode === 'carousel' && task.item && activeDoc) {
+        let content = activeDoc.content
+        if (task.item.ratio !== task.ratio && task.ratio) {
+          content = setCarouselRatio(content, task.item.carouselOrdinal!, task.ratio)
+        }
+        updateActive({ content: fillImageSrc(content, task.item.alt, task.item.line, ref) })
+        toast.success(`${label} 已按手动裁切上传并回填`)
+      } else {
+        const alt = file.name.replace(/\.[^.]+$/, '')
+        editorRef.current?.insertText(`![${alt}](${ref})`)
+        toast.success('已按手动裁切插入')
+      }
+    } catch (e) {
+      toast.error('上传失败', { description: e instanceof Error ? e.message : '请稍后重试' })
+    } finally {
+      setUploadingKey(null)
     }
   }
 
@@ -330,13 +372,19 @@ export default function EditorPage() {
       </div>
 
       <RatioPicker
-        open={frameTask !== null}
+        open={frameTask !== null && manualOpen === false}
         label={frameTask?.item?.no ?? ''}
         alt={frameTask?.item?.alt || frameTask?.files[0]?.name || ''}
         current={frameTask?.locked}
         mode={frameTask?.mode ?? 'loose'}
         busy={uploadingKey !== null}
         onCancel={() => setFrameTask(null)}
+        onManual={() => {
+          if (!frameTask) return
+          const lockedOrCurrent = frameTask.locked ?? null
+          setFrameTask({ ...frameTask, ratio: lockedOrCurrent })
+          setManualOpen(true)
+        }}
         onConfirm={(ratio) => {
           const task = frameTask
           setFrameTask(null)
@@ -346,6 +394,25 @@ export default function EditorPage() {
           } else {
             void uploadLoose(task.files, ratio)
           }
+        }}
+      />
+
+      <ManualCropper
+        open={manualOpen && frameTask !== null}
+        file={frameTask?.files[0] ?? null}
+        label={frameTask?.item?.no ?? ''}
+        alt={frameTask?.item?.alt || frameTask?.files[0]?.name || ''}
+        ratio={frameTask?.locked ?? null}
+        busy={uploadingKey !== null}
+        onCancel={() => {
+          setManualOpen(false)
+          setFrameTask(null)
+        }}
+        onConfirm={(blob, mime) => {
+          const task = frameTask
+          setManualOpen(false)
+          setFrameTask(null)
+          if (task) void uploadCroppedBlob(blob, mime, task)
         }}
       />
 

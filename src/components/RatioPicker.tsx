@@ -18,6 +18,8 @@ interface Props {
   busy: boolean
   onCancel: () => void
   onConfirm: (ratio: CarouselRatio | null) => void
+  /** Hand the image over to the interactive cropper instead. */
+  onManual: () => void
 }
 
 /**
@@ -25,7 +27,7 @@ interface Props {
  * published slides line up instead of jumping in height. A standalone image is
  * left alone unless the user asks otherwise.
  */
-export default function RatioPicker({ open, label, alt, current, mode, busy, onCancel, onConfirm }: Props) {
+export default function RatioPicker({ open, label, alt, current, mode, busy, onCancel, onConfirm, onManual }: Props) {
   const [ratio, setRatio] = useState<CarouselRatio | null>(mode === 'loose' ? null : current ?? '4:3')
   const locked = mode === 'carousel' && Boolean(current)
 
@@ -111,9 +113,20 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
 
           <p className="mt-3 text-[11px] leading-relaxed text-[#9A9A9A]">
             {preview
-              ? `裁切尺寸 ${preview.cropWidth}×${preview.cropHeight}，正文里显示为 ${preview.width}×${preview.height}。`
+              ? `自动居中裁切，尺寸 ${preview.cropWidth}×${preview.cropHeight}。`
               : '原图按自身尺寸上传，正文里按容器宽度自适应。'}
           </p>
+
+          <button
+            type="button"
+            onClick={onManual}
+            disabled={locked}
+            title={locked ? '这个轮播的比例已定，先改正文里的 :::carousel 那一行' : undefined}
+            className="mt-2 flex w-full items-center justify-between rounded-lg border border-dashed border-black/15 px-3 py-2 text-left transition-colors hover:border-[#1677FF]/50 hover:bg-[#1677FF]/4 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <span className="text-[12px] text-[#333]">手动裁切</span>
+            <span className="text-[11px] text-[#9A9A9A]">自己拖，决定留哪一块 →</span>
+          </button>
         </div>
 
         <div className="mt-2 flex justify-end gap-2">

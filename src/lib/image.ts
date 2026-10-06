@@ -14,6 +14,14 @@ function preferredMime(ratio: CarouselRatio): string {
   return h > w ? 'image/jpeg' : 'image/webp'
 }
 
+/** Pixel rectangle in the source image, as react-easy-crop reports it. */
+export interface CropArea {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 async function loadImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {
@@ -37,6 +45,35 @@ function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: number):
       quality,
     )
   })
+}
+
+/** Draw a source rectangle onto a canvas at the requested output size. */
+async function renderCrop(
+  img: HTMLImageElement,
+  area: CropArea,
+  outW: number,
+  outH: number,
+  mime: string,
+): Promise<CroppedImage> {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(outW))
+  canvas.height = Math.max(1, Math.round(outH))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('当前浏览器不支持 canvas 裁切')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(
+    img,
+    Math.round(area.x),
+    Math.round(area.y),
+    Math.round(area.width),
+    Math.round(area.height),
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  )
+  const blob = await canvasToBlob(canvas, mime, 0.92)
+  return { blob, width: canvas.width, height: canvas.height, mime }
 }
 
 /**
@@ -72,17 +109,56 @@ export async function cropToRatio(file: File, ratio: CarouselRatio): Promise<Cro
   const outW = Math.max(1, Math.round(targetW * scale))
   const outH = Math.max(1, Math.round(targetH * scale))
 
-  const canvas = document.createElement('canvas')
-  canvas.width = outW
-  canvas.height = outH
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('当前浏览器不支持 canvas 裁切')
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH)
+  return renderCrop(img, { x: sx, y: sy, width: sw, height: sh }, outW, outH, preferredMime(ratio))
+}
 
-  const mime = preferredMime(ratio)
-  const blob = await canvasToBlob(canvas, mime, 0.92)
-  return { blob, width: outW, height: outH, mime }
+/**
+ * Output pixel size for a manual crop. Pure, so the sizing rules are testable
+ * outside a browser.
+ *
+ * - a carousel slide locks the frame ratio and the output width
+ * - a free crop keeps the area's own shape and is taken at its natural size
+ * - the source pixels are the hard limit: the frame is never upscaled
+ */
+export function manualOutputSize(
+  area: { width: number; height: number },
+  opts?: { ratio?: CarouselRatio | null; targetWidth?: number },
+): { width: number; height: number } {
+  const ratio = opts?.ratio ?? null
+  const targetW = opts?.targetWidth ?? carouselFrame(ratio ?? '4:3').cropWidth
+  const targetH = ratio
+    ? Math.round((targetW * Number(ratio.split(':')[1])) / Number(ratio.split(':')[0]))
+    : Math.round((targetW * area.height) / area.width)
+
+  const scale = Math.min(1, area.width / targetW, area.height / targetH)
+  return {
+    width: Math.max(1, Math.round(targetW * scale)),
+    height: Math.max(1, Math.round(targetH * scale)),
+  }
+}
+
+/**
+ * Crop to a rectangle the user picked by hand.
+ *
+ * `targetWidth` keeps carousel slides at a known output size; without it the
+ * crop is taken at its natural resolution. The frame is never upscaled.
+ */
+export async function cropToArea(
+  file: File,
+  area: CropArea,
+  opts?: { ratio?: CarouselRatio | null; targetWidth?: number },
+): Promise<CroppedImage> {
+  const img = await loadImage(file)
+  const { width: outW, height: outH } = manualOutputSize(area, opts)
+
+  const ratio = opts?.ratio ?? null
+  const mime = ratio
+    ? preferredMime(ratio)
+    : area.height > area.width
+      ? 'image/jpeg'
+      : 'image/webp'
+
+  return renderCrop(img, area, outW, outH, mime)
 }
 
 export function blobToBase64(blob: Blob): Promise<string> {
