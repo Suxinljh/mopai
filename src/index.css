@@ -191,7 +191,11 @@ body {
     var(--bg-base);
 }
 
-/* yoru (夜) — 代码编辑器一块深色井 */
+/* yoru (夜) — 深色主题。原本是给代码编辑器那块"深色井"写的局部覆盖，
+   现在要能整套切换，所以 akari 有的 token 这里都得有：缺 --page-wash 页面就没有底，
+   缺 --shadow-raised/lifted 卡片和按钮会塌成平面。派生规则：阴影沿用 akari 的配方、
+   只换 --neo-* 原语；-100 是深色底衬；-700 在深色里是"高对比文字"，所以更亮
+   （和这里 --primary-700 比 akari 更亮是同一个道理）。*/
 [data-theme="yoru"] {
   --bg-base: #0B1020;
   --bg-surface: #131A2E;
@@ -199,32 +203,63 @@ body {
   --bg-sunken: #080D1B;
   --bg-tint: #182146;
 
+  --glass-bg: hsla(225, 34%, 12%, 0.58);
+  --glass-border: hsla(225, 60%, 78%, 0.14);
+  --glass-blur: 18px;
+  --glass-sat: 130%;
+
   --ink-1: #E6EAF6;
   --ink-2: #A8B2CC;
   --ink-3: #6B7691;
   --ink-4: #434D67;
+  /* --primary-500 在深色里是浅长春花蓝，压在它上面的字必须是深色 */
+  --ink-on-primary: #0B1020;
 
   --line-1: rgba(255, 255, 255, 0.06);
   --line-2: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.18);
 
   --primary-100: #1F2A55;
+  --primary-200: #2C3C82;
   --primary-300: #3D52AE;
   --primary-500: #7A95FA;
   --primary-600: #93A9FB;
   --primary-700: #B4C3FC;
 
+  --ember-100: #3A2113;
   --ember-500: #F07830;
+  --ember-700: #FFB08A;
+
+  --frost-100: #10322F;
   --frost-500: #38C8C0;
+  --frost-700: #7FE0DA;
+
+  --success-100: #14352A;
+  --success-500: #4FD39A;
+  --success-700: #8FE7BE;
+  --warning-100: #3A2E14;
   --warning-500: #ECB85F;
+  --warning-700: #F7DFA8;
+  --error-100: #3A1F22;
   --error-500: #F08484;
+  --error-700: #FFB4B4;
 
   --neo-hi: rgba(255, 255, 255, 0.05);
   --neo-lo: rgba(0, 0, 0, 0.55);
   --neo-lo-soft: rgba(0, 0, 0, 0.35);
 
+  --shadow-flat: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-raised: -4px -4px 12px var(--neo-hi), 4px 4px 14px var(--neo-lo-soft);
+  --shadow-lifted: -6px -6px 18px var(--neo-hi), 8px 8px 22px var(--neo-lo);
   --shadow-inset: inset 3px 3px 7px var(--neo-lo-soft), inset -2px -2px 5px var(--neo-hi);
+  --shadow-inset-deep: inset 4px 4px 8px var(--neo-lo), inset -2px -2px 6px var(--neo-hi);
   --shadow-pop: 0 14px 36px -10px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
   --shadow-focus: 0 0 0 3px rgba(122, 149, 250, 0.35);
+
+  --page-wash:
+    radial-gradient(120% 80% at 80% -10%, rgba(122, 149, 250, 0.10), transparent 60%),
+    radial-gradient(90% 70% at 0% 100%, rgba(240, 120, 48, 0.06), transparent 55%),
+    var(--bg-base);
 }
 
 ::selection { background: var(--primary-200); color: var(--ink-1); }
