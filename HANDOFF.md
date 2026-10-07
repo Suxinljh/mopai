@@ -170,25 +170,36 @@ git format-patch --binary 767661c..HEAD -- app/   # 补丁会落在仓库根，�
 git init && git fetch <伞仓库路径> $SP && git reset --hard FETCH_HEAD
 git am -p2 <那些补丁>                              # -p2 剥掉 a/app/ 前缀
 git rev-parse HEAD^{tree}                          # 必须等于伞仓库的 git rev-parse HEAD:app
+cat <伞根>/publish-scrub-expressions.txt <伞根>/publish-scrub-rebuild-only.txt > /tmp/scrub-all.txt
 python -m git_filter_repo --force \
-  --replace-text  <伞根>/publish-scrub-expressions.txt \
-  --replace-message <伞根>/publish-scrub-expressions.txt
+  --replace-text  /tmp/scrub-all.txt \
+  --replace-message /tmp/scrub-all.txt
 # 补一个 LICENSE 提交，然后 push
 ```
 
-`publish-scrub-expressions.txt` 在**伞仓库根目录**（刻意放在 app/ 之外，不进公开仓库）：
-它把个人邮箱、真实姓名、WSL 用户名与本机路径从全部历史里替换成占位符。
-新增敏感串时先加进这张表再重发布。
+两张表都在**伞仓库根目录**（刻意放在 app/ 之外，不进公开仓库）：
+`publish-scrub-expressions.txt` 是常用规则（个人邮箱、真实姓名、WSL 用户名、本机路径，
+以及修复早期错误替换留下的 `literal:` 前缀那组）；`publish-scrub-rebuild-only.txt`
+里的规则**只在全量重建时用**（见下）。新增敏感串时先加进表再重发布。
 
-**表格格式的坑（2026-10-07 踩过）**：格式是 `literal:原文==>替换文本`，
-git-filter-repo 按**最后一个** `==>` 切分，右边整串当作替换文本。右边**再写一次 `literal:` 是错的**——
-它会被原样写进文件。之前那么写，公开仓库里到处是 `<umbrella repo root>`，
-四个 `cf-*.sh` 更变成 `source $HOME/.config/codex/private.env`：文件找不到、
-`2>/dev/null` 把错误吞掉，脚本静默拿到空 token。`scripts/publish-scrub.py` 两种写法都兼容
-（会自动剥掉右边的 `literal:`），但表本身要保持干净。
+三个踩过的坑，都会静默毁掉公开仓库，改表之前先读完：
+
+1. **表里绝对不能有注释行。** git-filter-repo 不支持 `#` 注释，它把**每一行**都当规则：
+   一行光秃秃的 `#` 会变成"把所有文件里的每个 `#` 换成 `***REMOVED***`"。
+   2026-10-07 这么干过一次，重写后 **64 个文件**被啃掉 shell/Python 注释和 Markdown 标题，
+   而且不报错。`scripts/publish-scrub.py` 现在遇到注释行会直接退出。要写说明就写在这里。
+2. **规则右边不要再写 `literal:`。** 格式是 `literal:原文==>替换文本`，filter-repo 按
+   **最后一个** `==>` 切，右边整串都是替换文本。早期写成 `==>literal:X`，于是公开仓库里
+   到处是带 `literal:` 前缀的占位符，四个 `cf-*.sh` 的 `source` 行因此指向一个不存在的文件，
+   `2>/dev/null` 又把报错吞了，脚本静默拿到空 token。表里现在有一组专门的修复规则，
+   重建时会把历史里那些前缀一并清掉。
+3. **`--incremental` 必须跳过 rebuild-only 那张表。** 那些规则是 2026-10-07 之后加的，
+   公开历史的基线没有它们；补丁的**上下文行**被替换掉，`git am` 就报 `patch does not apply`。
 
 **验收重写结果时只扫 HEAD 的祖先**：`git rev-list --all` 会把你为了对比而 fetch 进来的
 备份 remote 也算进去，于是"没替换成功"的假象。用 `git rev-list HEAD`。
+另外**必查** `git grep -c '\*\*\*REMOVED\*\*\*' HEAD` 是不是 0——那是坑 1 的唯一信号。
+重写前先 `git clone --mirror` 一份备份，出问题能整仓还原。
 
 **红线：全量重建会改写公开历史，只有在确认还没有外部 clone/fork 时才允许 force push。**
 一旦有了外部克隆者，停止重建，改为在公开仓库里直接接收提交（伞仓库退居归档），
@@ -205,9 +216,10 @@ git am -p2 <补丁目录>/0*.patch                        # -p2 剥掉 a/app/ �
 git push origin master                                # 普通推送，不是 force
 ```
 
-**坑：`--incremental` 是必须的。** 表里带 `# rebuild-only:` 标记的那组规则是 2026-10-07 之后加的，
-公开历史的基线是用旧表跑出来的，那些地方仍是原文；补丁的**上下文行**一旦被替换成占位符，
-`git am` 就报 `patch does not apply`。它们只对**全量重建**有意义（重建时整条历史一起换）。
+**坑：`--incremental` 是必须的。** 它跳过 `publish-scrub-rebuild-only.txt` 那张表——
+里面的规则是 2026-10-07 之后加的，公开历史的基线是用旧规则跑出来的，那些地方仍是原文；
+补丁的**上下文行**一旦被替换成占位符，`git am` 就报 `patch does not apply`。
+它们只对**全量重建**有意义（重建时整条历史一起换）。
 同一条教训的另一面：**新写进公开文件的文本不要再出现这些串**，否则每次增量都得特殊处理——
 `scripts/cdp-verify-public-access.mjs` 里原本用黑名单校验脱敏，被 scrub 改成两个相同占位符后
 静默失效，现已改成正向断言示例稿自己的标题。

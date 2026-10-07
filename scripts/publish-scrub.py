@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the publish scrub table to a directory of git patches.
+"""Apply the publish scrub tables to a directory of git patches.
 
 The umbrella repository is private and the published one is not, so anything
 personal has to be replaced on the way out. A full rebuild runs
@@ -10,19 +10,18 @@ which is what this does.
 Usage:
     python app/scripts/publish-scrub.py <table> <patch-dir> [--incremental]
 
-The table is the umbrella root's `publish-scrub-expressions.txt` (it lives
-outside app/ on purpose, so it never reaches the public repository). Lines are
-`literal:FROM==>TO`, split on the **last** `==>`, exactly the way
-git-filter-repo does it; the right-hand side is the replacement text verbatim,
-so it must not carry a `literal:` prefix (one is tolerated and stripped, because
-an older version of the table had it and that prefix ended up written into the
-published files).
+`<table>` is the umbrella root's `publish-scrub-expressions.txt`. Rules that
+only make sense for a full rebuild live beside it in
+`publish-scrub-rebuild-only.txt` and are loaded automatically — except with
+`--incremental`, which skips them. Those rules were added after the public
+history was cut, so the already-published files still contain the original
+text; rewriting a patch's *context* lines with them makes `git am` fail with
+"patch does not apply".
 
-`--incremental` skips every rule below a `# rebuild-only:` marker in the table.
-Those rules were added after the public history was cut, so the already-published
-files still contain the original text; rewriting a patch's *context* lines with
-them makes `git am` fail with "patch does not apply". They are still correct —
-and necessary — for a full rebuild.
+Neither table may contain comment lines, and this script refuses them: the same
+files are fed to git-filter-repo, which does NOT support comments and turns
+every line into a rule. A stray `#` line becomes "replace every # in every file
+with ***REMOVED***", which quietly destroys the published tree.
 """
 
 import io
@@ -30,31 +29,30 @@ import os
 import sys
 
 
-def load_rules(table_path, incremental):
+def load_rules(table_path):
     rules = []
-    rebuild_only = False
     with io.open(table_path, encoding='utf-8') as fh:
-        for line in fh:
+        for lineno, line in enumerate(fh, 1):
             line = line.rstrip('\r\n')
-            stripped = line.strip()
-            if stripped.startswith('#'):
-                if stripped.startswith('# rebuild-only:'):
-                    rebuild_only = True
+            if not line.strip():
                 continue
-            if not stripped:
-                continue
+            if line.lstrip().startswith('#'):
+                raise SystemExit(
+                    '%s:%d: comment lines are not allowed. git-filter-repo reads the same\n'
+                    'file and treats every line as a rule, so a "#" line becomes "replace\n'
+                    'every # with ***REMOVED***". Put the explanation in HANDOFF instead.'
+                    % (table_path, lineno)
+                )
             if not line.startswith('literal:'):
-                raise SystemExit('unsupported expression (only literal: is handled): ' + line)
+                raise SystemExit(
+                    '%s:%d: only literal: rules are handled: %s' % (table_path, lineno, line)
+                )
+            # Split on the LAST '==>', exactly like git-filter-repo, and take the
+            # right hand side verbatim: a 'literal:' prefix there is not syntax,
+            # it is text that ends up written into the published files.
             src, sep, dst = line[len('literal:'):].rpartition('==>')
             if not sep:
-                raise SystemExit('expression has no ==> replacement: ' + line)
-            if dst.startswith('literal:'):
-                # Legacy table format. The prefix is not part of the replacement;
-                # keeping it writes "literal:" into the published files.
-                dst = dst[len('literal:'):]
-            if incremental and rebuild_only:
-                print('  skip (rebuild-only): %s' % src[:40])
-                continue
+                raise SystemExit('%s:%d: expression has no ==> replacement' % (table_path, lineno))
             rules.append((src, dst))
     # Longest source first, so a specific path wins over its own prefix.
     rules.sort(key=lambda r: -len(r[0]))
@@ -68,8 +66,23 @@ def main():
         raise SystemExit(__doc__)
     table_path, patch_dir = args
 
-    rules = load_rules(table_path, incremental)
-    print('scrub rules: %d (%s)' % (len(rules), 'incremental' if incremental else 'full'))
+    tables = [table_path]
+    rebuild_only = os.path.join(os.path.dirname(os.path.abspath(table_path)),
+                                'publish-scrub-rebuild-only.txt')
+    if incremental:
+        if os.path.exists(rebuild_only):
+            print('  skip (rebuild-only table): %s' % os.path.basename(rebuild_only))
+    elif os.path.exists(rebuild_only):
+        tables.append(rebuild_only)
+    else:
+        print('  warning: no rebuild-only table at %s' % rebuild_only)
+
+    rules = []
+    for table in tables:
+        loaded = load_rules(table)
+        print('%s: %d rules' % (os.path.basename(table), len(loaded)))
+        rules.extend(loaded)
+    rules.sort(key=lambda r: -len(r[0]))
 
     names = sorted(n for n in os.listdir(patch_dir) if n.endswith('.patch'))
     if not names:
