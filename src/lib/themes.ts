@@ -1,65 +1,31 @@
-import type { CarouselRatio, InlineSeg, SignatureConfig } from './types'
+import type { CarouselRatio, InlineSeg } from './types'
+import { ORIGINAL_LICENSE, type ThemeMeta, type ThemeOrigin } from './theme-meta'
+import { APP_BYLINE, APP_NAME, REPO_URL } from './brand'
+import { baseTableBlock, carouselFrame, esc, type Theme } from './theme-kit'
 import { EXTRA_THEMES } from './themes-extra'
+import { IMPORTED_THEMES } from './themes-imported'
 
 // 主题 = 一组「语义节点 → 内联样式 HTML」的模板函数。
-// 新主题只新增本文件中的一个对象，稿件与解析层不变。
+// 契约、渲染原语、微信红线消毒与导入主题的装配器都在 theme-kit.ts，
+// 本文件只放手写主题与 catalog 汇总；新增主题不改稿件与解析层。
 
-export type ThemeCategory = '简约' | '商务' | '杂志' | '活力'
+export { BLANK, baseTableBlock, carouselFrame, esc, sanitizeStyle } from './theme-kit'
+export type { CarouselFrame, Theme, ThemeCategory, ThemePalette, ThemeStyles } from './theme-kit'
+export type { ColorFamily, Complexity, StyleTag, ThemeMeta, ThemeOrigin } from './theme-meta'
+export { COMPLEXITY_LEVELS, COLOR_FAMILIES, STYLE_TAGS, complexityLabel } from './theme-meta'
 
-export interface Theme {
-  id: string
-  name: string
-  desc: string
-  /** 模板专区的分组 */
-  category: ThemeCategory
-  // 供 UI 缩略图/标识使用
-  ui: { accent: string; soft: string; ink: string }
-  root(inner: string): string
-  seg(s: InlineSeg): string
-  paragraph(inner: string): string
-  heading(num: number | null, kicker: string, title: string): string
-  subheading(title: string): string
-  center(inner: string): string
-  quoteCard(inner: string): string
-  quoteBox(paras: string[]): string
-  imageBlock(src: string, caption: string): string
-  carousel(title: string, caption: string, items: { src: string; alt: string }[], ratio: CarouselRatio): string
-  signature(cfg: SignatureConfig): string
-  listBlock(ordered: boolean, items: string[]): string
-  codeBlock(lang: string, code: string): string
-  hr(): string
+/** 自研主题的来源档案：仓库地址跟着 brand.ts 走，开源后自动填上。 */
+const ORIGINAL_ORIGIN: ThemeOrigin = {
+  kind: 'original',
+  project: APP_NAME,
+  author: APP_BYLINE.replace(/^by\s*/, ''),
+  repo: REPO_URL,
+  license: ORIGINAL_LICENSE,
+  attribution: `${APP_NAME} ${APP_BYLINE} 自研主题`,
 }
 
-export const BLANK = '<p style="margin:0;"><span leaf="">&nbsp;</span></p>'
-
-export function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-// ---------- 轮播画框 ----------
-// 同一轮播里的图片在上传时就被裁成同一比例，所以这里可以直接给出确定宽高。
-// 用 width + height + height:auto：公众号会把 width 压到可用宽度，height:auto
-// 让高度跟着属性里的固有比例走，画框比例在任何宽度下都不变。
-const CAROUSEL_MAX_W = 240
-const CAROUSEL_MAX_H = 240
-
-export interface CarouselFrame {
-  width: number
-  height: number
-  cropWidth: number
-  cropHeight: number
-}
-
-export function carouselFrame(ratio: CarouselRatio): CarouselFrame {
-  const [rw, rh] = ratio.split(':').map(Number)
-  let width = CAROUSEL_MAX_W
-  let height = Math.round((width * rh) / rw)
-  if (height > CAROUSEL_MAX_H) {
-    height = CAROUSEL_MAX_H
-    width = Math.round((height * rw) / rh)
-  }
-  // 按 3 倍屏取裁切尺寸，缩放后仍然清晰
-  return { width, height, cropWidth: width * 3, cropHeight: height * 3 }
+function original(meta: Omit<ThemeMeta, 'origin'>): ThemeMeta {
+  return { ...meta, origin: ORIGINAL_ORIGIN }
 }
 
 // ---------- golden：亮蓝科技风，与示范稿逐段一致 ----------
@@ -95,6 +61,11 @@ export const goldenTheme: Theme = {
   desc: '亮蓝科技风 · 日常默认',
   category: '杂志',
   ui: { accent: '#1677FF', soft: '#B9DAFF', ink: '#17365D' },
+  meta: original({
+    styles: ['科技', '商务'],
+    complexity: 2,
+    color: '冷色',
+  }),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#333333;line-height:1.75;letter-spacing:1px;overflow-x:hidden;padding:0 10px;box-sizing:border-box;">${inner}</section>`,
@@ -157,6 +128,9 @@ export const goldenTheme: Theme = {
       .join('')}</${tag}>`
   },
 
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#17365D', border: '#E6EDF6', headBg: '#F6FAFF', text: '#333333' }),
+
   codeBlock: (_lang, code) =>
     `<section style="margin:0;padding:14px 16px;background:#F6FAFF;border-radius:8px;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#17365D;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
 
@@ -183,6 +157,11 @@ export const minimalTheme: Theme = {
   desc: '无装饰 · 纯文字层级',
   category: '简约',
   ui: { accent: '#111111', soft: '#E5E5E5', ink: '#111111' },
+  meta: original({
+    styles: ['学术', '杂志'],
+    complexity: 1,
+    color: '中性',
+  }),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#333333;line-height:1.75;letter-spacing:1px;overflow-x:hidden;padding:0 10px;box-sizing:border-box;">${inner}</section>`,
@@ -251,6 +230,9 @@ export const minimalTheme: Theme = {
       .join('')}</${tag}>`
   },
 
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#111111', border: '#EAEAEA', headBg: '#FAFAFA', text: '#333333' }),
+
   codeBlock: (_lang, code) =>
     `<section style="margin:0;padding:14px 16px;background:#F7F7F7;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#333333;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
 
@@ -279,6 +261,11 @@ export const steadyTheme: Theme = {
   desc: '藏青政务风 · 成果宣传',
   category: '商务',
   ui: { accent: '#1F4E8C', soft: '#C7D8EC', ink: '#1B3A6B' },
+  meta: original({
+    styles: ['政务', '商务'],
+    complexity: 2,
+    color: '冷色',
+  }),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#333333;line-height:1.75;letter-spacing:1px;overflow-x:hidden;padding:0 10px;box-sizing:border-box;">${inner}</section>`,
@@ -351,6 +338,9 @@ export const steadyTheme: Theme = {
       .join('')}</${tag}>`
   },
 
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#1B3A6B', border: '#E4E9F0', headBg: '#F4F7FB', text: '#333333' }),
+
   codeBlock: (_lang, code) =>
     `<section style="margin:0;padding:14px 16px;background:#F7F8FA;border:1px solid #E4E9F0;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#1B3A6B;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
 
@@ -358,7 +348,7 @@ export const steadyTheme: Theme = {
     `<p style="margin:32px 0;text-align:center;text-indent:0;font-size:12px;letter-spacing:4px;color:#C7D8EC;"><span leaf="">· · ·</span></p>`,
 }
 
-export const THEMES: Theme[] = [goldenTheme, minimalTheme, steadyTheme, ...EXTRA_THEMES]
+export const THEMES: Theme[] = [goldenTheme, minimalTheme, steadyTheme, ...EXTRA_THEMES, ...IMPORTED_THEMES]
 
 export function getTheme(id: string): Theme {
   return THEMES.find((t) => t.id === id) || goldenTheme

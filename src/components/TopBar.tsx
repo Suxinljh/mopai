@@ -127,7 +127,7 @@ export default function TopBar(p: Props) {
       {/* 中：主题切换（实时缩略预览） */}
       <Popover open={themeOpen} onOpenChange={setThemeOpen}>
         <PopoverTrigger asChild>
-          <button className="ya-btn-secondary ya-btn">
+          <button data-theme-switcher className="ya-btn-secondary ya-btn">
             <span className="h-2 w-2 rounded-full" style={{ background: THEME_DOT[activeTheme.id] || '#4F6CE8' }} />
             {activeTheme.name}
             <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-[#6B7793]">
@@ -139,7 +139,14 @@ export default function TopBar(p: Props) {
           <p className="ya-eyebrow mb-2 px-1">排版主题 · 当前稿件实时预览</p>
           <div className="max-h-[62vh] overflow-y-auto pr-0.5">
             {(['简约', '商务', '杂志', '活力'] as const).map((cat) => {
-              const list = THEMES.filter((t) => t.category === cat)
+              // 快速切换器只放每类前几套：219 套每套都要实时渲染缩略图，
+              // 全塞进来既慢也没法扫；完整浏览在下面的「查看全部模板」
+              const QUICK_PER_CAT = 6
+              const all = THEMES.filter((t) => t.category === cat)
+              const list = all.slice(0, QUICK_PER_CAT)
+              if (activeTheme.category === cat && !list.some((t) => t.id === activeTheme.id)) {
+                list.unshift(activeTheme)
+              }
               if (!list.length) return null
               return (
                 <div key={cat} className="mb-3">
@@ -148,6 +155,7 @@ export default function TopBar(p: Props) {
                     {list.map((t) => (
                       <button
                         key={t.id}
+                        data-theme-quick={t.id}
                         onClick={() => {
                           p.onTheme(t.id)
                           setThemeOpen(false)
@@ -182,7 +190,7 @@ export default function TopBar(p: Props) {
             }}
             className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl py-2 text-[12px] text-[#4F6CE8] transition-colors hover:bg-[#F1F4FB]"
           >
-            查看全部模板
+            查看全部 {THEMES.length} 套模板
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         </PopoverContent>

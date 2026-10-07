@@ -4,8 +4,9 @@ import { parseMarkdown } from '../src/lib/parse'
 import { renderDoc, setCarouselRatio, clearImageSrc, removeImageLine, fillImageSrc, collectMaterials } from '../src/lib/render'
 import { THEMES, carouselFrame } from '../src/lib/themes'
 import { previewPage, cleanHtml } from '../src/lib/clipboard'
-import { SAMPLE_DOC } from '../src/lib/sample'
+import { SAMPLE_DOC, THEME_PREVIEW_DOC } from '../src/lib/sample'
 import { CAROUSEL_RATIOS, DEFAULT_CAROUSEL_RATIO } from '../src/lib/types'
+import { COLOR_FAMILIES, KNOWN_LICENSES, ORIGINAL_LICENSE, STYLE_TAGS } from '../src/lib/theme-meta'
 import { manualOutputSize } from '../src/lib/image'
 import fs from 'node:fs'
 
@@ -18,6 +19,11 @@ const resolveImg = (s: string) =>
   s.startsWith('img:') ? `https://wechat.yoru-and-akari.dev/api/img/${s.slice(4)}` : s
 
 const parsed = parseMarkdown(SAMPLE_DOC)
+// 主题红线循环用统一预览稿：它覆盖表格、列表、代码、轮播等全部语义节点，
+// 页面上比较的也是这一份，所以离线校验和用户所见是同一个东西。
+const preview = parseMarkdown(THEME_PREVIEW_DOC)
+
+const blockKinds = [...new Set(preview.blocks.map((b) => b.type))].sort()
 
 let failures = 0
 function check(theme: string, name: string, ok: boolean, detail = '') {
@@ -51,20 +57,40 @@ function bareTextRuns(html: string): string[] {
     .filter((s) => s.length > 0)
 }
 
-/** Items across all carousel blocks — each is counted in stats.images but shares one 图N caption. */
-function carouselItemCount(doc: ReturnType<typeof parseMarkdown>): number {
-  return doc.blocks.reduce((n, b) => n + (b.type === 'carousel' ? b.items.length : 0), 0)
+/**
+ * A raw `"` inside a style value closes the attribute early, and the browser then
+ * drops every declaration after it — a double-quoted font stack once cost the
+ * imported themes their max-width. Tag-stripping cannot see this, so check instead
+ * that each style attribute is followed by whitespace or a tag delimiter.
+ */
+function brokenStyleAttrs(html: string): string[] {
+  const bad: string[] = []
+  const re = /style="[^"]*"(.)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html)) !== null) {
+    if (!/[\s>/]/.test(m[1])) bad.push(html.slice(m.index, m.index + 70))
+  }
+  return bad
 }
 
 console.log('front matter titles:', parsed.meta.titles.length, '| cover:', !!parsed.meta.cover)
 console.log('blocks:', parsed.blocks.length)
+
+// 统一预览稿必须真的覆盖全部语义节点，否则某些主题能力根本没被校验到
+const REQUIRED_BLOCKS = [
+  'carousel', 'center', 'code', 'heading', 'hr', 'image', 'list',
+  'paragraph', 'quoteBox', 'quoteCard', 'signature', 'subheading', 'table',
+]
+const missingBlocks = REQUIRED_BLOCKS.filter((k) => !blockKinds.includes(k))
+check('preview-doc', 'sample covers every semantic node', missingBlocks.length === 0, missingBlocks.join(','))
+console.log('preview doc blocks:', preview.blocks.length, '|', blockKinds.join(' '))
 
 for (const theme of THEMES) {
   console.log(`\n=== theme: ${theme.id} (${theme.name}) ===`)
   let html: string
   let stats: ReturnType<typeof renderDoc>['stats']
   try {
-    const r = renderDoc(parsed, theme, sig, resolveImg)
+    const r = renderDoc(preview, theme, sig, resolveImg)
     html = r.html
     stats = r.stats
   } catch (e) {
@@ -97,8 +123,8 @@ for (const theme of THEMES) {
 
 /** Source-less images become plain placeholder paragraphs. Carousel items are
    * counted in stats.images but share one 图N caption on the carousel module. */
-  const standalone = parsed.blocks.filter((b) => b.type === 'image' && !b.src).length
-  const carouselsWithoutSrc = parsed.blocks.filter(
+  const standalone = preview.blocks.filter((b) => b.type === 'image' && !b.src).length
+  const carouselsWithoutSrc = preview.blocks.filter(
     (b) => b.type === 'carousel' && b.items.every((it) => !it.src),
   ).length
   const placeholders = html.match(/<p[^>]*><span leaf="">图\d+ [^<]*<\/span><\/p>/g) || []
@@ -107,11 +133,77 @@ for (const theme of THEMES) {
     `${placeholders.length}/${standalone + carouselsWithoutSrc}`)
   check(theme.id, 'no <img> when nothing is uploaded', !/<img /.test(html))
 
+  // 表格：必须真出 <table>，且逐列对齐（:--- / :---: / ---:）要落到单元格上
+  const cells = (html.match(/<t[hd] /g) || []).length
+  check(theme.id, 'table renders as a real <table>', /<table[\s>]/.test(html) && cells === 12, `cells=${cells}`)
+  check(theme.id, 'table keeps per-column alignment',
+    /text-align:center/.test(html) && /text-align:right/.test(html))
+  check(theme.id, 'table cells wrap their text in a leaf span',
+    !/<t[hd][^>]*>[^<]/.test(html))
+
+  const broken = brokenStyleAttrs(html)
+  check(theme.id, 'no style attribute is truncated by a raw quote', broken.length === 0, broken[0] ?? '')
+
   const clean = cleanHtml(html)
   const page = previewPage(html, `墨排-${theme.id}`)
   fs.writeFileSync(`${OUT}/${theme.id}_clean.html`, clean, 'utf8')
   fs.writeFileSync(`${OUT}/${theme.id}_preview.html`, page, 'utf8')
   console.log(`  wrote ${theme.id}_clean.html (${clean.length} B), ${theme.id}_preview.html (${page.length} B)`)
+}
+
+// --- catalog: 分类与来源档案必须齐全，否则再分发链路断了 ---
+{
+  console.log('\n=== catalog integrity ===')
+  const ids = THEMES.map((t) => t.id)
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i)
+  check('catalog', 'theme ids are unique', dupes.length === 0, [...new Set(dupes)].join(','))
+  check('catalog', 'library is not empty', THEMES.length > 0, `${THEMES.length} themes`)
+
+  const allowedLicenses = new Set<string>([...KNOWN_LICENSES, ORIGINAL_LICENSE])
+  const bySource = new Map<string, number>()
+  const byLicense = new Map<string, number>()
+  const bad: string[] = []
+
+  for (const t of THEMES) {
+    const problems: string[] = []
+    const m = t.meta
+    if (!t.name?.trim()) problems.push('name')
+    if (!t.desc?.trim()) problems.push('desc')
+    if (!m) problems.push('meta')
+    else {
+      if (!m.styles.length) problems.push('styles empty')
+      for (const tag of m.styles) if (!STYLE_TAGS.includes(tag)) problems.push(`unknown tag ${tag}`)
+      if (![1, 2, 3].includes(m.complexity)) problems.push(`complexity ${m.complexity}`)
+      if (!COLOR_FAMILIES.includes(m.color)) problems.push(`color ${m.color}`)
+      const o = m.origin
+      if (!o.project?.trim()) problems.push('origin.project')
+      if (!o.author?.trim()) problems.push('origin.author')
+      if (!o.attribution?.trim()) problems.push('origin.attribution')
+      if (!allowedLicenses.has(o.license)) problems.push(`license ${o.license}`)
+      if (o.kind === 'ported') {
+        if (!o.repo?.trim()) problems.push('origin.repo')
+        if (!o.upstream?.trim()) problems.push('origin.upstream')
+        if (!o.licenseFile) problems.push('origin.licenseFile')
+        else {
+          // licenseFile 以仓库根为基准；本脚本在 app/ 下跑
+          const rel = o.licenseFile.startsWith('app/') ? o.licenseFile.slice(4) : o.licenseFile
+          if (!fs.existsSync(rel)) problems.push(`license file missing: ${o.licenseFile}`)
+        }
+      }
+      bySource.set(o.project, (bySource.get(o.project) ?? 0) + 1)
+      byLicense.set(o.license, (byLicense.get(o.license) ?? 0) + 1)
+    }
+    if (problems.length) bad.push(`${t.id}: ${problems.join(', ')}`)
+  }
+
+  check('catalog', 'every theme has complete classification and provenance', bad.length === 0,
+    bad.slice(0, 5).join(' | '))
+  if (bad.length) for (const b of bad) console.log(`      - ${b}`)
+
+  const sorted = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1])
+  console.log(`  themes: ${THEMES.length}`)
+  console.log(`  by source : ${sorted(bySource).map(([k, v]) => `${k} ${v}`).join(' | ')}`)
+  console.log(`  by license: ${sorted(byLicense).map(([k, v]) => `${k} ${v}`).join(' | ')}`)
 }
 
 // --- img:key protocol: a resolved image must reach the output as an absolute URL ---

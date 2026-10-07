@@ -1,5 +1,5 @@
 import type { Block, CarouselRatio, Doc, InlineSeg, RenderStats, SignatureConfig } from './types'
-import { BLANK, esc, type Theme } from './themes'
+import { baseTableBlock, BLANK, esc, type Theme } from './themes'
 
 // 盒式模块的前后空行由 pushBlock(boxed=true) 统一插入
 
@@ -98,6 +98,23 @@ export function renderDoc(
         })
         parts.push(theme.listBlock(b.ordered, b.items.map((it) => renderSegs(theme, it))))
         break
+      case 'table': {
+        const cells = [...b.head, ...b.rows.flat()]
+        cells.forEach((c) => {
+          chars += countSegs(c)
+          warnLinks(c, warnings)
+        })
+        const tableBlock = theme.tableBlock ?? ((h, r, a) => baseTableBlock(h, r, a))
+        pushBlock(
+          tableBlock(
+            b.head.map((c) => renderSegs(theme, c)),
+            b.rows.map((r) => r.map((c) => renderSegs(theme, c))),
+            b.align,
+          ),
+          true,
+        )
+        break
+      }
       case 'code':
         pushBlock(theme.codeBlock(b.lang, b.code), true)
         break

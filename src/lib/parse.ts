@@ -2,7 +2,7 @@ import MarkdownIt from 'markdown-it'
 import type { Token } from 'markdown-it'
 import markdownItMark from 'markdown-it-mark'
 import markdownItContainer from 'markdown-it-container'
-import type { Block, CarouselRatio, Doc, DocMeta, InlineSeg } from './types'
+import type { Block, CarouselRatio, CellAlign, Doc, DocMeta, InlineSeg } from './types'
 import { DEFAULT_CAROUSEL_RATIO, isCarouselRatio } from './types'
 
 // ---------- front matter ----------
@@ -72,7 +72,10 @@ function pushSeg(out: InlineSeg[], text: string, flags: Flags) {
 export function walkInline(children: Token[] | null): InlineSeg[] {
   const out: InlineSeg[] = []
   if (!children) return out
-  const flags: Flags = {}
+  // 必须是 let：关闭标记时要把 flags 整体换回开标记之前的快照。
+  // 用 Object.assign 恢复会漏掉"快照里没有的键"，导致加粗/下划线/斜体
+  // 在标记结束后继续泄漏到同段剩余文字上。
+  let flags: Flags = {}
   const stack: Flags[] = []
   for (const t of children) {
     switch (t.type) {
@@ -83,34 +86,34 @@ export function walkInline(children: Token[] | null): InlineSeg[] {
         pushSeg(out, t.content, { ...flags, code: true })
         break
       case 'strong_open':
-        stack.push({ ...flags }); flags.bold = true
+        stack.push({ ...flags }); flags = { ...flags, bold: true }
         break
       case 'strong_close':
-        Object.assign(flags, stack.pop())
+        flags = stack.pop() ?? {}
         break
       case 'em_open':
-        stack.push({ ...flags }); flags.italic = true
+        stack.push({ ...flags }); flags = { ...flags, italic: true }
         break
       case 'em_close':
-        Object.assign(flags, stack.pop())
+        flags = stack.pop() ?? {}
         break
       case 's_open':
-        stack.push({ ...flags }); flags.strike = true
+        stack.push({ ...flags }); flags = { ...flags, strike: true }
         break
       case 's_close':
-        Object.assign(flags, stack.pop())
+        flags = stack.pop() ?? {}
         break
       case 'mark_open':
-        stack.push({ ...flags }); flags.mark = true
+        stack.push({ ...flags }); flags = { ...flags, mark: true }
         break
       case 'mark_close':
-        Object.assign(flags, stack.pop())
+        flags = stack.pop() ?? {}
         break
       case 'link_open':
-        stack.push({ ...flags }); flags.link = String(t.attrGet('href') ?? '')
+        stack.push({ ...flags }); flags = { ...flags, link: String(t.attrGet('href') ?? '') }
         break
       case 'link_close':
-        Object.assign(flags, stack.pop())
+        flags = stack.pop() ?? {}
         break
       case 'softbreak':
         pushSeg(out, '', flags) // CJK：段内软换行直接接合
@@ -306,6 +309,49 @@ export function parseMarkdown(src: string): Doc {
         i++
       }
       blocks.push({ type: 'list', ordered, items })
+      continue
+    }
+
+    if (t.type === 'table_open') {
+      // markdown-it puts the column alignment on each th/td as `style="text-align:…"`;
+      // only the header row is authoritative, body cells just repeat it.
+      let align: CellAlign[] = []
+      const head: InlineSeg[][] = []
+      const rows: InlineSeg[][][] = []
+      let inHead = false
+      let row: InlineSeg[][] | null = null
+      let rowAlign: CellAlign[] = []
+      i++
+      while (i < tokens.length && tokens[i].type !== 'table_close') {
+        const tk = tokens[i]
+        if (tk.type === 'thead_open') inHead = true
+        else if (tk.type === 'thead_close') inHead = false
+        else if (tk.type === 'tr_open') {
+          row = []
+          rowAlign = []
+        } else if (tk.type === 'tr_close') {
+          if (row) {
+            if (inHead) {
+              // GFM 表头只有一行；再来一行也不覆盖已取的表头与对齐
+              if (!head.length) {
+                head.push(...row)
+                align = rowAlign
+              }
+            } else {
+              rows.push(row)
+            }
+          }
+          row = null
+        } else if (tk.type === 'th_open' || tk.type === 'td_open') {
+          const m = /text-align:\s*(left|center|right)/.exec(String(tk.attrGet('style') ?? ''))
+          rowAlign.push(m ? (m[1] as CellAlign) : 'left')
+          const inline = tokens[i + 1]
+          row?.push(inline?.type === 'inline' ? walkInline(inline.children) : [])
+          i += 2
+        }
+        i++
+      }
+      blocks.push({ type: 'table', align, head, rows })
       continue
     }
 

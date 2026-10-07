@@ -40,6 +40,8 @@ harness 会在父仓库自建分支或 worktree。并行干活必须遵守：
   - `npm run check` — tsc，必须 0 错误
   - `npm run build` — 产出 `dist/boot.js`（自包含）+ `dist/public/`
   - `npm run verify:themes` — 111 项离线校验（主题红线、比例、删除、驱动契约）
+  - `npm run import:themes` — 从上游克隆重新生成 `src/lib/themes-imported/`（上游位置见 THEME-SOURCES.md）
+  - `node scripts/cdp-verify-theme-library.mjs <url> <key> 9334` — 模板库页的真实浏览器验收
   - `npm run dev` — 本地开发
 
 本地身份可以随便填，`ACCESS_KEY` / `SESSION_SECRET` 用 `.env.example` 里的占位值即可。
@@ -56,7 +58,22 @@ harness 会在父仓库自建分支或 worktree。并行干活必须遵守：
 Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/themes.ts）→ 全内联样式 HTML
 ```
 
-**新增主题 = 在 `src/lib/themes.ts` 加一个 Theme 对象**，解析层和已有稿件零改动。这条线是这个项目存在的理由，别绕过去在解析层塞视觉判断。
+**新增主题 = 加一个 Theme 对象**，解析层和已有稿件零改动。这条线是这个项目存在的理由，别绕过去在解析层塞视觉判断。
+
+主题库在 2026-10-07 扩成多来源聚合（219 套），分层如下，改主题相关代码先看清归属：
+
+| 文件 | 职责 |
+|---|---|
+| `src/lib/theme-kit.ts` | Theme 契约、渲染原语（esc / carouselFrame / baseTableBlock / makeCarousel / makeImageBlock）、微信红线消毒 `sanitizeStyle`、由样式规格装配 Theme 的 `buildTheme` |
+| `src/lib/theme-meta.ts` | 分类维度（风格标签 / 复杂度 / 色系）与来源档案类型；许可证白名单 |
+| `src/lib/themes.ts` | 三套自研主题 + `THEMES` 总注册表 |
+| `src/lib/themes-extra.ts` | 六套 gzh-design-skill 移植主题（AGPL，见 THEME-SOURCES.md） |
+| `src/lib/themes-imported/*.ts` | **生成物**，由 `npm run import:themes` 产出，不要手改 |
+| `scripts/themes/import.ts` + `scripts/themes/lib/*` | 各来源的 importer：抽取 → 归一 → 色板反推 → 分类推导 → 落盘 |
+
+每套 Theme 必须带 `meta`（风格标签、复杂度、色系、来源项目/作者/仓库/许可证/署名/lineage）。
+`npm run verify:themes` 会校验 catalog 完整性与许可证文件存在性——**新加主题不写 meta 过不了校验**，这是刻意的。
+来源审计、未接入清单与「应用整体许可证」的待拍板事项都在 `THEME-SOURCES.md`。
 
 ### 自研公众号语法
 
@@ -69,6 +86,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 | `:::center` … `:::` | 居中强调句 |
 | `![图注](src)` | 图片；`src` 留空 = 占位，图号自动编排 |
 | `:::carousel 4:3 标题` … `:::` | 轮播；比例可省略，默认 4:3 |
+| GFM 表格（`\|` 分隔，支持 `:---` 逐列对齐） | 真 `<table>`，逐列对齐落到单元格 |
 | `@signature` | 署名块 |
 | front matter `titles` / `cover` | 只进侧栏，不进正文 |
 
@@ -183,7 +201,19 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
 
 > 2026-10-06 更新：撤销删除、删稿复活竞态、轮播批量传图定位、编辑器快捷键、Home.tsx 残留已修（`scripts/cdp-verify-round5.mjs` 是验收脚本）。另外 **`docs.save` 现在是 update-only**：新行只能走 `saveToDrafts` / `importLocal`，别给 `save` 加回 insert 分支——那是删稿复活的闸门。
 >
-> 2026-10-07 更新：更名「公众号排版助手 by Yoru」+ Yoru 阴文印 logo + 弦月 favicon（`src/lib/brand.ts`、`src/components/YoruMark.tsx`）；新增模板专区页 `/themes`（`src/pages/Themes.tsx`，验收 `scripts/cdp-verify-rebrand.mjs`）；前端按设计系统铁律进一步内凹化（carriers 用 `ya-well`/inset，`ya-selected` 自带 sunken 底+1.5px 描边）；域名从 mopai 切到 wechat（Tunnel ingress + DNS + Access 放行三处都要动）。
+> 2026-10-07 更新（主题库分支）：修掉 `src/lib/parse.ts` 的 `walkInline` 状态恢复 bug——
+> 关闭行内标记时用 `Object.assign(flags, stack.pop())` 恢复，空快照不会清掉已置位的键，
+> 导致**加粗/下划线/斜体在标记结束后泄漏到同段剩余文字**（线上一直存在，截图可见整段被划线）。
+> 现改为整体换回快照，回归测试在 `src/lib/parse.test.ts`。
+>
+> 2026-10-07 发现但**没修**（属编辑器分支的文件范围）：`src/components/EditorPane.tsx` 的
+> `buildDeco` 给 `Decoration.line()` 传了 `(line.from, line.to)`，而 CodeMirror 要求行装饰区间
+> 零长度，于是任何含 front matter / `:::` / `@signature` 的稿件每次更新都抛
+> `RangeError: Line decoration ranges must be zero-length`。CodeMirror 会吞掉异常，
+> 编辑器仍可用，但**语法高亮静默失效**。修法是把四处 `to: line.to` 改成 `to: line.from`。
+> 主题库分支的 CDP 验收对它单独归因，不算主题库的失败。
+>
+> 2026-10-07 更新：更名「公众号排版助手 by Yoru」+ Yoru 阴文印 logo + 弦月 favicon（`src/lib/brand.ts`、`src/components/YoruMark.tsx`）；新增模板专区页 `/themes`（`src/pages/Themes.tsx`，验收 `scripts/cdp-verify-rebrand.mjs`）；前端按设计系统铁律进一步内凹化（carriers 用 `ya-well`/inset，`ya-selected` 自带 sunken 底+1.5px 描边）；域名从 mopai 切到 wechat（Tunnel ingress + DNS + Access 放行三处都要动）。同日晚些时候 `/themes` 升级为多来源模板库（见上表与 THEME-SOURCES.md）。
 
 ### 产品方向（用户明确拍板的）
 

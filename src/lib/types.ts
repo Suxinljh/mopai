@@ -11,6 +11,8 @@ export interface InlineSeg {
   link?: string // 公众号正文外链不可点，渲染降级并产生警告
 }
 
+export type CellAlign = 'left' | 'center' | 'right'
+
 export type Block =
   | { type: 'paragraph'; segs: InlineSeg[] }
   | { type: 'heading'; kicker: string; title: string; numbered: boolean } // ## KICKER | 标题
@@ -22,6 +24,7 @@ export type Block =
   | { type: 'carousel'; title: string; ratio: CarouselRatio; items: CarouselItem[]; line: number; occurrence: number } // :::carousel [比例] 标题
   | { type: 'signature' } // @signature
   | { type: 'list'; ordered: boolean; items: InlineSeg[][] }
+  | { type: 'table'; align: CellAlign[]; head: InlineSeg[][]; rows: InlineSeg[][][] } // GFM 表格
   | { type: 'code'; lang: string; code: string }
   | { type: 'hr' }
 

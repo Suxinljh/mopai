@@ -4,51 +4,32 @@
 // 映射到 Theme 接口的 13 个语义节点；装饰性空元素一律带 <span leaf=""><br></span> 占位
 // （微信会剥掉空元素样式，这是 gzh-design 的兼容铁律）。
 
-import { carouselFrame, type Theme } from './themes'
+import { baseTableBlock, esc, makeCarousel, makeImageBlock, type Theme } from './theme-kit'
+import type { ThemeMeta, ThemeOrigin } from './theme-meta'
 import type { InlineSeg } from './types'
 
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+/**
+ * 这六套主题移植自 gzh-design-skill 的主题组件库，上游是 AGPL-3.0-or-later。
+ * AGPL 有传染性且第 13 条覆盖网络服务：本项目把它们的组件语言编进产物，
+ * 整体就必须继续以 AGPL 提供源码。许可证文本留存在 licenses/ 下。
+ */
+const GZH_DESIGN: Omit<ThemeOrigin, 'upstream' | 'adapted'> = {
+  kind: 'ported',
+  project: 'gzh-design-skill',
+  author: '甲木 (Jiamu) × 摸鱼小李 (Moyu Xiaoli)',
+  repo: 'https://github.com/isjiamu/gzh-design-skill',
+  license: 'AGPL-3.0-or-later',
+  licenseFile: 'app/licenses/gzh-design-skill/LICENSE',
+  attribution:
+    '主题组件库来自 gzh-design-skill，Copyright (C) 2026 甲木 (Jiamu) × 摸鱼小李 (Moyu Xiaoli)，依据 AGPL-3.0-or-later 使用并修改。',
 }
 
-/** 轮播骨架（各主题共用结构，换配色）：标题 + 滑动提示 + 横向滚动 + 底部说明。 */
-function makeCarousel(opts: {
-  titleStyle: string
-  hintColor: string
-  captionColor: string
-  placeholderBorder: string
-  placeholderBg: string
-}): Theme['carousel'] {
-  return (title, caption, items, ratio) => {
-    const f = carouselFrame(ratio)
-    const head = `<section style="margin:0;">${
-      title
-        ? `<p style="margin:0 0 10px;${opts.titleStyle}"><span leaf="">${esc(title)}</span></p>`
-        : ''
-    }<p style="margin:0 0 14px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:${opts.hintColor};"><span leaf="">← 左右滑动查看图片 →</span></p></section>`
-    const body = `<section style="margin:0;padding:0 0 6px;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;">${items
-      .map((it, i) => {
-        const img = it.src
-          ? `<img src="${esc(it.src)}" width="${f.width}" height="${f.height}" style="display:block;width:${f.width}px;height:auto;" />`
-          : `<section style="width:${f.width}px;height:${f.height}px;box-sizing:border-box;border:1px dashed ${opts.placeholderBorder};background:${opts.placeholderBg};display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:12px;letter-spacing:1px;color:${opts.hintColor};text-indent:0;text-align:center;"><span leaf="">待插入图片</span></p></section>`
-        const cap = it.alt
-          ? `<p style="margin:8px 0 0;font-size:12px;line-height:1.5;letter-spacing:0.5px;text-align:center;text-indent:0;color:${opts.captionColor};"><span leaf="">${esc(it.alt)}</span></p>`
-          : ''
-        return `<section style="display:inline-block;vertical-align:top;width:${f.width}px;margin-right:${i === items.length - 1 ? 0 : 10}px;white-space:normal;">${img}${cap}</section>`
-      })
-      .join('')}</section>`
-    const cap = `<p style="margin:12px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:${opts.captionColor};"><span leaf="">${esc(caption)}</span></p>`
-    return head + body + cap
-  }
+function gzh(file: string, meta: Omit<ThemeMeta, 'origin'>, adapted: string): ThemeMeta {
+  return { ...meta, origin: { ...GZH_DESIGN, upstream: `references/theme-${file}.md`, adapted } }
 }
 
-/** 图片块（各主题共用结构，换配色）：圆角图 + 图注；无 src 时只留占位段。 */
-function makeImageBlock(opts: { radius?: number; border?: string; captionColor: string }): Theme['imageBlock'] {
-  return (src, caption) =>
-    src
-      ? `<p style="margin:24px 0 8px;text-align:center;text-indent:0;"><img src="${esc(src)}" style="display:block;width:100%;height:auto;${opts.radius ? `border-radius:${opts.radius}px;` : ''}${opts.border ? `border:${opts.border};` : ''}" /></p><p style="margin:8px 0 24px;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:${opts.captionColor};"><span leaf="">${esc(caption)}</span></p>`
-      : `<p style="margin:24px 0;font-size:12px;line-height:1.6;letter-spacing:1px;text-align:center;text-indent:0;color:${opts.captionColor};"><span leaf="">${esc(caption)}</span></p>`
-}
+const GZH_ADAPTED =
+  '取上游的设计变量与组件语言，映射到本项目的语义节点接口；补 <span leaf=""> 包裹、去掉 class/id、改为全内联样式以符合公众号平台红线。'
 
 // ============================================================
 // 摸鱼绿（活力）：emerald 杂志风，卡片丰富、信息密度高，适合教程/测评/清单
@@ -71,6 +52,7 @@ export const moyuGreenTheme: Theme = {
   desc: '翠绿杂志风 · 教程/清单/盘点',
   category: '活力',
   ui: { accent: '#059669', soft: '#A7F3D0', ink: '#111827' },
+  meta: gzh('moyu-green', { styles: ['杂志', '科技'], complexity: 3, color: '冷色' }, GZH_ADAPTED),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#374151;line-height:1.75;letter-spacing:0.5px;overflow-x:hidden;box-sizing:border-box;">${inner}</section>`,
@@ -108,7 +90,7 @@ export const moyuGreenTheme: Theme = {
       )
       .join('')}</section>`,
 
-  imageBlock: makeImageBlock({ radius: 12, captionColor: '#9CA3AF' }),
+  imageBlock: makeImageBlock({ imgStyle: 'border-radius:12px;', captionColor: '#9CA3AF' }),
 
   carousel: makeCarousel({
     titleStyle:
@@ -139,6 +121,9 @@ export const moyuGreenTheme: Theme = {
       .join('')}</section>`
   },
 
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#059669', border: '#E5E7EB', headBg: '#F9FAFB', text: '#374151' }),
+
   codeBlock: (_lang, code) =>
     `<section style="margin:0 20px;padding:14px 16px;background:#111827;border-radius:8px;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#E5E7EB;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
 
@@ -167,6 +152,7 @@ export const redWhiteTheme: Theme = {
   desc: '正红编辑风 · 观点/深度分析',
   category: '商务',
   ui: { accent: '#DC2626', soft: '#FECACA', ink: '#1C1917' },
+  meta: gzh('red-white', { styles: ['商务', '杂志'], complexity: 2, color: '暖色' }, GZH_ADAPTED),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#374151;line-height:1.75;letter-spacing:0.5px;overflow-x:hidden;box-sizing:border-box;">${inner}</section>`,
@@ -204,7 +190,7 @@ export const redWhiteTheme: Theme = {
       )
       .join('')}</section>`,
 
-  imageBlock: makeImageBlock({ radius: 10, captionColor: '#9CA3AF' }),
+  imageBlock: makeImageBlock({ imgStyle: 'border-radius:10px;', captionColor: '#9CA3AF' }),
 
   carousel: makeCarousel({
     titleStyle:
@@ -235,6 +221,9 @@ export const redWhiteTheme: Theme = {
       .join('')}</section>`
   },
 
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#991B1B', border: '#FECACA', headBg: '#FEF2F2', text: '#374151' }),
+
   codeBlock: (_lang, code) =>
     `<section style="margin:0 10px;padding:14px 16px;background:#1C1917;border-radius:10px;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#F3F4F6;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
 
@@ -263,6 +252,7 @@ export const graphiteTheme: Theme = {
   desc: '全灰阶 · 设计/科技评论',
   category: '简约',
   ui: { accent: '#52525B', soft: '#E4E4E7', ink: '#27272A' },
+  meta: gzh('graphite-minimal', { styles: ['科技', '学术'], complexity: 1, color: '中性' }, GZH_ADAPTED),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#52525B;line-height:1.8;letter-spacing:0.3px;overflow-x:hidden;box-sizing:border-box;">${inner}</section>`,
@@ -300,7 +290,7 @@ export const graphiteTheme: Theme = {
       )
       .join('')}</section>`,
 
-  imageBlock: makeImageBlock({ captionColor: '#A1A1AA' }),
+  imageBlock: makeImageBlock({ imgStyle: '', captionColor: '#A1A1AA' }),
 
   carousel: makeCarousel({
     titleStyle:
@@ -330,6 +320,9 @@ export const graphiteTheme: Theme = {
       )
       .join('')}</section>`
   },
+
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#27272A', border: '#E4E4E7', headBg: '#FAFAFA', text: '#52525B' }),
 
   codeBlock: (_lang, code) =>
     `<section style="margin:0 10px;padding:16px 18px;background:#FAFAFA;border:1px solid #E4E4E7;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#27272A;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
@@ -361,6 +354,7 @@ export const zenTheme: Theme = {
   desc: '衬线墨绿 · 深度随笔/艺术',
   category: '简约',
   ui: { accent: '#4A5D52', soft: '#B5C8BC', ink: '#2B2B2B' },
+  meta: gzh('zen-whitespace', { styles: ['文艺复古', '治愈'], complexity: 1, color: '中性' }, GZH_ADAPTED),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#525252;line-height:1.9;letter-spacing:0.3px;overflow-x:hidden;box-sizing:border-box;">${inner}</section>`,
@@ -392,7 +386,7 @@ export const zenTheme: Theme = {
       )
       .join('')}</section>`,
 
-  imageBlock: makeImageBlock({ captionColor: '#A3A3A3' }),
+  imageBlock: makeImageBlock({ imgStyle: '', captionColor: '#A3A3A3' }),
 
   carousel: makeCarousel({
     titleStyle: `font-family:${ZEN_SERIF};font-size:16px;line-height:1.8;letter-spacing:1px;text-align:center;text-indent:0;color:#2B2B2B;font-weight:600;`,
@@ -411,6 +405,9 @@ export const zenTheme: Theme = {
       .map((it) => `<li style="margin:8px 0;">${it}</li>`)
       .join('')}</${tag}></section>`
   },
+
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#2B2B2B', border: '#E8E8E8', headBg: '#F5F5F4', text: '#525252' }),
 
   codeBlock: (_lang, code) =>
     `<section style="margin:0 16px;padding:16px 18px;background:#F5F5F4;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#3D5046;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
@@ -440,6 +437,7 @@ export const moyuTicketTheme: Theme = {
   desc: '门票硬阴影 · 测评/对比',
   category: '活力',
   ui: { accent: '#059669', soft: '#A7F3D0', ink: '#1A1A1A' },
+  meta: gzh('moyu-ticket', { styles: ['杂志', '卡通'], complexity: 3, color: '暖色' }, GZH_ADAPTED),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;background:#FFFFFF;color:#555555;line-height:1.75;letter-spacing:0.5px;overflow-x:hidden;box-sizing:border-box;">${inner}</section>`,
@@ -477,7 +475,7 @@ export const moyuTicketTheme: Theme = {
       )
       .join('')}</section>`,
 
-  imageBlock: makeImageBlock({ border: '2px solid #1A1A1A', captionColor: '#999999' }),
+  imageBlock: makeImageBlock({ imgStyle: 'border:2px solid #1A1A1A;', captionColor: '#999999' }),
 
   carousel: makeCarousel({
     titleStyle:
@@ -508,6 +506,9 @@ export const moyuTicketTheme: Theme = {
       .join('')}</section>`
   },
 
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#1A1A1A', border: '#1A1A1A', headBg: '#F0FDF4', text: '#555555' }),
+
   codeBlock: (_lang, code) =>
     `<section style="margin:0 20px;padding:14px 16px;background:#1A1A1A;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#F3F4F6;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,
 
@@ -536,6 +537,7 @@ export const oliveTheme: Theme = {
   desc: '内刊纸感 · 复盘/案例/评测',
   category: '杂志',
   ui: { accent: '#ED7B2F', soft: '#E5E7E0', ink: '#23251D' },
+  meta: gzh('olive-journal', { styles: ['杂志', '文艺复古'], complexity: 3, color: '暖色' }, GZH_ADAPTED),
 
   root: (inner) =>
     `<section style="max-width:677px;margin:0 auto;padding:8px;box-sizing:border-box;background:#FDFDF8;color:#4D4F46;line-height:1.75;overflow-x:hidden;">${inner}</section>`,
@@ -573,7 +575,7 @@ export const oliveTheme: Theme = {
       )
       .join('')}</section></section>`,
 
-  imageBlock: makeImageBlock({ radius: 6, border: '1px solid #BFC1B7', captionColor: '#9EA096' }),
+  imageBlock: makeImageBlock({ imgStyle: 'border-radius:6px;border:1px solid #BFC1B7;', captionColor: '#9EA096' }),
 
   carousel: makeCarousel({
     titleStyle:
@@ -593,6 +595,9 @@ export const oliveTheme: Theme = {
       .map((it) => `<li style="margin-bottom:8px;">${it}</li>`)
       .join('')}</${tag}></section>`
   },
+
+  tableBlock: (head, rows, align) =>
+    baseTableBlock(head, rows, align, { accent: '#23251D', border: '#BFC1B7', headBg: '#EEEFE9', text: '#4D4F46' }),
 
   codeBlock: (_lang, code) =>
     `<section style="margin:24px 8px 0;padding:14px 16px;background:#EEEFE9;border:1px solid #BFC1B7;border-radius:6px;overflow-x:auto;"><p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.7;letter-spacing:0;text-indent:0;color:#23251D;white-space:pre-wrap;"><span leaf="">${esc(code)}</span></p></section>`,

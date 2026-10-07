@@ -11,6 +11,7 @@
     "start": "NODE_ENV=production node dist/boot.js",
     "check": "tsc -b",
     "verify:themes": "esbuild scripts/verify-themes.ts --bundle --platform=node --format=esm --outfile=node_modules/.tmp/verify-themes.mjs --log-level=warning && node node_modules/.tmp/verify-themes.mjs",
+    "import:themes": "esbuild scripts/themes/import.ts --bundle --platform=node --format=esm --external:esbuild --external:postcss --external:js-yaml --outfile=node_modules/.tmp/import-themes.mjs --log-level=warning && node node_modules/.tmp/import-themes.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
