@@ -303,7 +303,7 @@ check('B', 'a second doc exists so delete is offered', Array.isArray(menuNames) 
 const del = await evaluate(`(() => {
   const items = [...document.querySelectorAll('[role=menuitem]')]
   for (const it of items) {
-    if (!it.textContent.includes('<SAMPLE_COMPANY>生态稿')) continue
+    if (!it.textContent.includes('示例稿')) continue
     const btn = [...it.querySelectorAll('button')].find(b => b.textContent.trim() === '删除')
     if (btn) { btn.click(); return 'clicked: ' + it.textContent.slice(0, 20) }
   }
@@ -317,7 +317,7 @@ check('B', 'undo toast appeared', toastText.includes('已删除') && toastText.i
 await openDocMenu()
 await sleep(500)
 const menuAfterDelete = (await menuItems()).join('|')
-check('B', 'doc is gone from the menu', !menuAfterDelete.includes('<SAMPLE_COMPANY>生态稿'), menuAfterDelete.slice(0, 80))
+check('B', 'doc is gone from the menu', !menuAfterDelete.includes('示例稿'), menuAfterDelete.slice(0, 80))
 // Press Escape to close the menu, then hit 撤销.
 await keyEvent('Escape', 'Escape', 27, 0)
 await sleep(300)

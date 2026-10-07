@@ -40,7 +40,7 @@ export function loadDocs(): { docs: DocRecord[]; activeId: string } {
   }
   const first: DocRecord = {
     id: uid(),
-    name: '<SAMPLE_COMPANY>生态稿 · 示例',
+    name: '示例稿 · 语法速览',
     content: SAMPLE_DOC,
     updatedAt: Date.now(),
     savedAt: null,
