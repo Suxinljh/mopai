@@ -145,6 +145,38 @@ ssh cc-tokyo-01 'bash /tmp/install.sh'
 
 **部署后必须核对**：本地与线上的 `dist/boot.js` sha256、以及 `dist/public/index.html` 引用的 js/css 文件名是否一致。前一轮出现过"以为部署了、其实服务器还在跑旧包"。
 
+### 公开仓库与发布流水线
+
+公开仓库：<https://github.com/yoruuuchan/wechat-md-studio>（master，AGPL-3.0-or-later，
+`src/lib/brand.ts` 的 `REPO_URL` 已指向它，顶栏 GitHub 图标因此出现）。
+**伞仓库继续私有，是唯一事实来源**；公开仓库只装 app 子树，不含 signin/、vote-slider/、
+媒体拼图/、WTO 报道文件与那批大二进制。
+
+公开历史的形状：app 原始仓库的 31 个提交（合并提交 `767661c` 的第二父链）+ 伞时代触及
+`app/` 的提交 + 一个补 LICENSE 的提交。全量重建步骤（幂等，约半分钟）：
+
+```bash
+# 在伞仓库里
+SP=$(git rev-parse 767661c^2)
+git format-patch --binary 767661c..HEAD -- app/   # 补丁会落在仓库根，记得移走
+# 在构建目录里（<local tmp>/public-repo-build 是现成的克隆）
+git init && git fetch <伞仓库路径> $SP && git reset --hard FETCH_HEAD
+git am -p2 <那些补丁>                              # -p2 剥掉 a/app/ 前缀
+git rev-parse HEAD^{tree}                          # 必须等于伞仓库的 git rev-parse HEAD:app
+python -m git_filter_repo --force \
+  --replace-text  <伞根>/publish-scrub-expressions.txt \
+  --replace-message <伞根>/publish-scrub-expressions.txt
+# 补一个 LICENSE 提交，然后 push
+```
+
+`publish-scrub-expressions.txt` 在**伞仓库根目录**（刻意放在 app/ 之外，不进公开仓库）：
+它把个人邮箱、真实姓名、WSL 用户名与本机路径从全部历史里替换成占位符。
+新增敏感串时先加进这张表再重发布。
+
+**红线：全量重建会改写公开历史，只有在确认还没有外部 clone/fork 时才允许 force push。**
+一旦有了外部克隆者，停止重建，改为在公开仓库里直接接收提交（伞仓库退居归档），
+或从伞仓库 cherry-pick。
+
 ### ⚠️ 往服务器推脚本的坑
 
 **不要用 PowerShell 管道推脚本**——它会把末尾换行变成 CRLF，bash 会在最后一行报 `$'\r': command not found`。
