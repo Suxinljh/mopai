@@ -20,7 +20,21 @@
 仓库根目录：<umbrella repo root>\app
 ```
 
-注意**根目录下还有别的项目**（signin、vote-slider、媒体拼图 等），别搞错。`app/` 才是本项目，它自己是一个 git 仓库。品牌：产品名「公众号排版助手」、署名「by Yoru」，常量在 `src/lib/brand.ts`；logo 是 YORU 设计系统的阴文印「夜」（`src/components/YoruMark.tsx`），favicon 是弦月（`public/favicon.svg`）。localStorage key 沿用历史前缀 `mopai.*`（内部标识，用户不可见，不要改，改了丢老数据）。
+注意**根目录下还有别的项目**（signin、vote-slider、媒体拼图 等），别搞错。`app/` 才是本项目，它自己是一个 git 仓库（父目录不是仓库，历史如此：项目最早只有 app/，git 就 init 在 app/ 里）。品牌：产品名「公众号排版助手」、署名「by Yoru」，常量在 `src/lib/brand.ts`；logo 是 YORU 设计系统的月相行「新月-上弦-满月-下弦」（`src/components/YoruMark.tsx`，3b 变体，满月用品牌靛青 #2E4A68），favicon 是弦月（`public/favicon.svg`）。localStorage key 沿用历史前缀 `mopai.*`（内部标识，用户不可见，不要改，改了丢老数据）。
+
+### 多工作树（worktree）并行纪律
+
+仓库有两个 worktree（`git worktree list` 可查）：
+
+- `app/` —— 主树，分支 `master`
+- `app-wt-2/` —— 并行树，分支 `wip-parallel`（第二个 AI 在这里干活）
+
+两棵树共享同一个 `.git`，但工作区、node_modules、分支各自独立。并行干活必须遵守：
+
+1. **端口错开**：本地测试服与 CDP 调试端口不能撞车。主树用 `PORT=3200` + CDP `9333`；并行树用 `PORT=3201` + CDP `9334`（CDP 脚本都接受端口参数或改文件里的常量）。
+2. **.env 不随 worktree**（gitignore）：新树建好后手动从主树复制 `.env`，测试数据库按惯例用环境变量覆盖成独立文件（`DATABASE_URL=file:./data/test-xxx.db`），绝不共享。
+3. **部署只许一棵树执行**：线上只有一个。谁的活先在本地全绿（check + verify:themes + test + CDP），谁把分支合回 `master`、由**主树**统一构建部署。并行树不要碰 `install.sh` / scp / 服务器。
+4. **合并顺序**：并行树开工前先 `git merge master` 同步；交付时在并行树上提交，回主树 `git merge wip-parallel`（或用户指定的方式），冲突按功能归属取舍。
 
 - Node 20+（本机 v24），`npm ci` 装依赖
 - `.env` 从 `.env.example` 复制（`.env` 已被 gitignore，**永远不要提交**）
