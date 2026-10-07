@@ -94,7 +94,7 @@ export default function SidePanel(p: Props) {
   }
 
   const materialRow = (m: MaterialItem) => (
-    <li key={m.no} className="rounded-xl bg-[#EFF2F8] px-3 py-2" style={{ boxShadow: 'var(--shadow-flat)' }}>
+    <li key={m.no} className="rounded-xl bg-[#DEE3EC] px-3 py-2" style={{ boxShadow: 'var(--shadow-inset)' }}>
       <div className="flex items-center gap-2">
         <button
           onClick={() => p.onJump(m.line)}
@@ -184,7 +184,7 @@ export default function SidePanel(p: Props) {
           ) : (
             <ul className="space-y-1.5">
               {p.titles.filter(Boolean).map((t, i) => (
-                <li key={i} className="flex items-start gap-2 rounded-xl bg-[#EFF2F8] px-3 py-2" style={{ boxShadow: 'var(--shadow-flat)' }}>
+                <li key={i} className="flex items-start gap-2 rounded-xl bg-[#DEE3EC] px-3 py-2" style={{ boxShadow: 'var(--shadow-inset)' }}>
                   {i === 0 && <span className="mt-0.5 shrink-0 rounded-md bg-[#4F6CE8]/10 px-1.5 text-[10px] text-[#4F6CE8]">推荐</span>}
                   <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-[#0E1525]">{t}</p>
                   <button

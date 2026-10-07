@@ -1,10 +1,10 @@
-# 墨排 · 接手提示词（给下一个 AI）
+# 公众号排版助手 by Yoru · 接手提示词（给下一个 AI）
 
 > 用法：把本文件整段贴给另一个窗口的 AI，或让它先读这个文件再动手。
 
 ---
 
-你是接手「墨排」（公众号 Markdown 排版工具）的本地 Agent。它**已经上线并在正常使用**，线上地址 <https://mopai.yoru-and-akari.dev>。你的任务是**找 bug、做优化**，不是重写。
+你是接手「公众号排版助手 by Yoru」（曾用名「墨排」，公众号 Markdown 排版工具，准备开源）的本地 Agent。它**已经上线并在正常使用**，线上地址 <https://wechat.yoru-and-akari.dev>（旧域名 mopai.yoru-and-akari.dev 已于 2026-10-07 下线）。你的任务是**找 bug、做优化**，不是重写。
 
 先通读本文件，再读代码。**不要凭空假设结构。**
 
@@ -20,7 +20,7 @@
 仓库根目录：<umbrella repo root>\app
 ```
 
-注意**根目录下还有别的项目**（signin、vote-slider、媒体拼图 等），别搞错。`app/` 才是墨排，它自己是一个 git 仓库。
+注意**根目录下还有别的项目**（signin、vote-slider、媒体拼图 等），别搞错。`app/` 才是本项目，它自己是一个 git 仓库。品牌：产品名「公众号排版助手」、署名「by Yoru」，常量在 `src/lib/brand.ts`；logo 是 YORU 设计系统的阴文印「夜」（`src/components/YoruMark.tsx`），favicon 是弦月（`public/favicon.svg`）。localStorage key 沿用历史前缀 `mopai.*`（内部标识，用户不可见，不要改，改了丢老数据）。
 
 - Node 20+（本机 v24），`npm ci` 装依赖
 - `.env` 从 `.env.example` 复制（`.env` 已被 gitignore，**永远不要提交**）
@@ -67,7 +67,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
   → 浏览器内裁切（可选：自动居中裁切 or 手动拖拽裁切）
   → tRPC storage.upload → mopai-images Worker → R2 桶 mopai-assets
   → Markdown 回填 img:<key>
-渲染时 resolveImg 把 img:<key> 展开为 https://mopai.yoru-and-akari.dev/api/img/<key>
+渲染时 resolveImg 把 img:<key> 展开为 `<当前访问域>/api/img/<key>`（`window.location.origin`，无硬编码域名，换域不用改代码）
   → 站点 302 → https://mopai-img.yoru-and-akari.dev/img/<key>（R2 真图）
 ```
 
@@ -91,9 +91,9 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 |---|---|
 | 站点 | cc-tokyo-01 `/opt/mopai/app`，Node 直跑 `dist/boot.js`，监听 **127.0.0.1:3100** |
 | 进程 | `mopai.service`（systemd，内存上限 384M，实测吃 ~35MB）+ `cloudflared-mopai.service` |
-| 入口 | Cloudflare Tunnel → `mopai.yoru-and-akari.dev`，tunnel id `1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14` |
+| 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev`，tunnel id `1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14`（ingress 在服务器 `/etc/cloudflared/mopai.yml`） |
 | 门禁 | Cloudflare Access 邮箱验证（只放行 `<ACCESS_ALLOW_EMAIL>`，168h 会话） |
-| 图片公网读 | 独立 Access 应用放行 `mopai.yoru-and-akari.dev/api/img/*`（**微信抓图必须能匿名访问**，否则粘贴到公众号后图全丢） |
+| 图片公网读 | 独立 Access 应用放行 `wechat.yoru-and-akari.dev/api/img/*`（**微信抓图必须能匿名访问**，否则粘贴到公众号后图全丢）。换域名时这条必须同步改，Zero Trust → Access → Applications |
 | 图片存储 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite，`/opt/mopai/app/data/mopai.db` |
 | SSH | `ssh cc-tokyo-01` |
@@ -170,6 +170,13 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
 ## 六、已知但**没修**的问题（建议从这里开始）
 
 > 2026-10-06 更新：撤销删除、删稿复活竞态、轮播批量传图定位、编辑器快捷键、Home.tsx 残留已修（`scripts/cdp-verify-round5.mjs` 是验收脚本）。另外 **`docs.save` 现在是 update-only**：新行只能走 `saveToDrafts` / `importLocal`，别给 `save` 加回 insert 分支——那是删稿复活的闸门。
+>
+> 2026-10-07 更新：更名「公众号排版助手 by Yoru」+ Yoru 阴文印 logo + 弦月 favicon（`src/lib/brand.ts`、`src/components/YoruMark.tsx`）；新增模板专区页 `/themes`（`src/pages/Themes.tsx`，验收 `scripts/cdp-verify-rebrand.mjs`）；前端按设计系统铁律进一步内凹化（carriers 用 `ya-well`/inset，`ya-selected` 自带 sunken 底+1.5px 描边）；域名从 mopai 切到 wechat（Tunnel ingress + DNS + Access 放行三处都要动）。
+
+### 产品方向（用户明确拍板的）
+
+- **准备开源**：功能完善后开源，GitHub 仓库地址定了之后填进 `src/lib/brand.ts` 的 `REPO_URL`（顶栏 GitHub 图标自动出现）。
+- **多人登录 / 收费**：远期方向，**先不做**。现在只记录意向：等功能完善、开源之后，再考虑多用户与付费模式。届时现在的「单口令 + 单用户空间」要拆成真实账号体系，这是大工程，别提前埋半吊子抽象。
 
 按价值排序：
 

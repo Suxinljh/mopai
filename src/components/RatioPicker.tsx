@@ -74,8 +74,9 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
               type="button"
               onClick={() => setRatio(null)}
               className={`mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
-                ratio === null ? 'ya-selected bg-[#EFF2F8]' : 'hover:bg-[#F1F4FB]'
+                ratio === null ? 'ya-selected' : 'bg-[#DEE3EC] hover:bg-[#E4E9F1]'
               }`}
+              style={ratio === null ? undefined : { boxShadow: 'var(--shadow-inset)' }}
             >
               <span className={`text-[12px] ${ratio === null ? 'font-semibold text-[#4F6CE8]' : 'text-[#394560]'}`}>
                 保持原图比例，不裁
@@ -96,8 +97,9 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
                   onClick={() => setRatio(r)}
                   title={`${r} → 裁成 ${f.cropWidth}×${f.cropHeight}`}
                   className={`flex flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-all ${
-                    active ? 'ya-selected bg-[#EFF2F8]' : 'hover:bg-[#F1F4FB]'
+                    active ? 'ya-selected' : 'bg-[#DEE3EC] hover:bg-[#E4E9F1]'
                   } ${locked && !active ? 'opacity-40' : ''} disabled:cursor-not-allowed`}
+                  style={active ? undefined : { boxShadow: 'var(--shadow-inset)' }}
                 >
                   <span
                     className={`block rounded-sm border ${active ? 'border-[#4F6CE8] bg-[#4F6CE8]/12' : 'border-black/20 bg-black/4'}`}

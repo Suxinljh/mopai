@@ -46,6 +46,6 @@ if (env.isProduction) {
   // so the app must not be reachable by hitting the host's public IP directly.
   const hostname = process.env.HOST || "127.0.0.1";
   serve({ fetch: app.fetch, port, hostname }, () => {
-    console.log(`墨排 running on http://${hostname}:${port}/`);
+    console.log(`公众号排版助手 running on http://${hostname}:${port}/`);
   });
 }

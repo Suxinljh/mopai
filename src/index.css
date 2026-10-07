@@ -328,8 +328,9 @@ body {
 .ya-input::placeholder { color: var(--ink-4); }
 .ya-input:focus { box-shadow: inset 3px 3px 6px rgba(143,158,191,0.40), inset -2px -2px 5px rgba(255,255,255,0.95), var(--shadow-focus); }
 
-/* 选中态铁律：1.5px primary 描边 + 微 inset，不用 tint 底 */
+/* 选中态铁律：flat-recessed（微 inset）+ 1.5px primary 描边，不用 tint 底 */
 .ya-selected {
+  background: var(--bg-sunken) !important;
   box-shadow: var(--shadow-inset), inset 0 0 0 1.5px var(--primary-500) !important;
 }
 

@@ -90,7 +90,7 @@ export default function Materials() {
   if (!isAuthenticated) {
     return (
       <Shell onBack={() => navigate('/')}>
-        <div className="ya-card p-6">
+        <div className="ya-well p-6">
           <p className="text-[13px] leading-relaxed text-[#394560]">
             素材库需要登录才能查看——图片是按账号归属的。
           </p>
@@ -109,7 +109,7 @@ export default function Materials() {
     <Shell onBack={() => navigate('/')}>
       <div className="space-y-4">
         {/* 用量 */}
-        <section className="ya-card p-5">
+        <section className="ya-well p-5">
           <div className="flex items-baseline justify-between">
             <h2 className="text-[14px] font-semibold text-[#0E1525]">存储用量</h2>
             <span className="text-[12px] text-[#6B7793]">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
@@ -136,7 +136,7 @@ export default function Materials() {
         </section>
 
         {/* 没在用的旧图 */}
-        <section className="ya-card p-5">
+        <section className="ya-well p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-[14px] font-semibold text-[#0E1525]">没在用的旧图</h2>
@@ -208,7 +208,7 @@ export default function Materials() {
         </section>
 
         {/* 全部图片 */}
-        <section className="ya-card p-5">
+        <section className="ya-well p-5">
           <h2 className="text-[14px] font-semibold text-[#0E1525]">全部图片 <span className="font-normal text-[#6B7793]">（最近 200 张）</span></h2>
           {files.isLoading ? (
             <p className="mt-3 text-[13px] text-[#6B7793]">读取中…</p>

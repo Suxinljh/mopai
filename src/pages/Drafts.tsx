@@ -145,7 +145,7 @@ export default function Drafts() {
   if (!isAuthenticated) {
     return (
       <Shell onBack={() => navigate('/')} count={null}>
-        <div className="ya-card p-6">
+        <div className="ya-well p-6">
           <p className="text-[13px] leading-relaxed text-[#394560]">
             草稿箱需要登录——稿件是跟着账号存的，这样换设备也能打开。
           </p>
@@ -207,13 +207,13 @@ export default function Drafts() {
           </p>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="ya-card p-6 text-[13px] text-[#6B7793]">
+        <p className="ya-well p-6 text-[13px] text-[#6B7793]">
           没有匹配「{query}」的稿件。
         </p>
       ) : (
         <ul className="space-y-2.5">
           {filtered.map((c) => (
-            <li key={c.id} className="ya-card ya-card-hover p-4">
+            <li key={c.id} className="ya-well p-4">
               <div className="flex items-start gap-3">
                 <button onClick={() => openDraft(c)} className="min-w-0 flex-1 text-left">
                   <p className="truncate text-[14px] font-semibold text-[#0E1525]">{c.name || '未命名稿件'}</p>

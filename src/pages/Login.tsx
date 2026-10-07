@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { trpc } from '@/providers/trpc'
+import { APP_NAME, APP_BYLINE } from '@/lib/brand'
+import { YoruMark } from '@/components/YoruMark'
 
 export default function Login() {
   const [accessKey, setAccessKey] = useState('')
@@ -22,13 +24,11 @@ export default function Login() {
     <div className="ya-page flex min-h-screen items-center justify-center">
       <div className="ya-card w-full max-w-sm p-6">
         <div className="mb-5 flex flex-col items-center gap-1 text-center">
-          {/* 灯与夜：brand mark */}
-          <span className="relative mb-2 inline-flex h-6 w-8" aria-hidden>
-            <span className="absolute bottom-0 left-0 h-6 w-6 rounded-full bg-[#4F6CE8]/85" />
-            <span className="absolute right-0 top-0 h-3.5 w-3.5 rounded-full bg-[#F06A20]" />
+          <span className="mb-2.5">
+            <YoruMark size={52} />
           </span>
-          <span className="text-xl font-bold tracking-wide text-[#0E1525]">墨排</span>
-          <span className="ya-eyebrow">wechat md studio</span>
+          <span className="text-[19px] font-bold tracking-wide text-[#0E1525]">{APP_NAME}</span>
+          <span className="ya-eyebrow">{APP_BYLINE}</span>
         </div>
         <form
           className="space-y-3"

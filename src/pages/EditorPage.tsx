@@ -483,6 +483,7 @@ export default function EditorPage() {
         themeId={settings.themeId}
         onTheme={(id) => setSettings((s) => ({ ...s, themeId: id }))}
         miniPreview={(id) => renderDoc(parsed, getTheme(id), settings.sig, resolveImg).html}
+        onOpenThemes={() => navigate('/themes')}
         copying={copied}
         onCopy={handleCopy}
         onExport={handleExport}

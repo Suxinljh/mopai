@@ -33,11 +33,12 @@ export default function PreviewPane({ html, stats, width, onWidthChange }: Props
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* 预览区是一口凹陷的井：纸张浮在井里，页面本身是 carrier */}
+      <div className="min-h-0 flex-1 overflow-y-auto" style={{ background: 'var(--bg-sunken)', boxShadow: 'var(--shadow-inset)' }}>
         <div className="flex justify-center px-4 py-6">
           <div
             className="shrink-0 rounded-[4px] bg-white transition-all duration-300"
-            style={{ width, boxShadow: 'var(--shadow-raised)' }}
+            style={{ width, boxShadow: 'var(--shadow-lifted)' }}
           >
             <div className="px-1 py-6" dangerouslySetInnerHTML={article} />
           </div>
