@@ -38,4 +38,10 @@ export const env = {
   // Soft ceiling shown on the materials page. R2's free tier is 10 GB and the
   // bucket is shared with other projects, so the default leaves headroom.
   storageQuotaBytes: Number(process.env.STORAGE_QUOTA_BYTES || 2 * 1024 * 1024 * 1024),
+
+  // Ceilings for uploads that arrive without a login. The bucket is shared and
+  // the endpoint is public, so the defaults are deliberately small.
+  anonDailyImages: Number(process.env.ANON_DAILY_IMAGES || 30),
+  anonDailyBytes: Number(process.env.ANON_DAILY_BYTES || 100 * 1024 * 1024),
+  anonTotalBytes: Number(process.env.ANON_TOTAL_BYTES || 1536 * 1024 * 1024),
 };

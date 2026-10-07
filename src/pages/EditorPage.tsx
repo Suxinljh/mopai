@@ -220,13 +220,6 @@ export default function EditorPage() {
 
   /** Loose images: dropped into the editor at the cursor. Cropping is optional. */
   const uploadLoose = async (files: File[], ratio?: CarouselRatio | null, task?: FrameTask | null) => {
-    if (!isAuthenticated) {
-      toast.error('上传图片需要先登录', {
-        description: '编辑和复制不需要登录',
-        action: { label: '去登录', onClick: () => navigate('/login') },
-      })
-      return
-    }
     for (const file of files) {
       if (!/^image\//.test(file.type)) {
         toast.error(`${file.name} 不是图片，已跳过`)
@@ -416,13 +409,6 @@ export default function EditorPage() {
 
   /** Entry point from the sidebar: decide whether a ratio has to be chosen first. */
   const startUpload = (files: File[], item: MaterialItem) => {
-    if (!isAuthenticated) {
-      toast.error('上传图片需要先登录', {
-        description: '编辑和复制不需要登录',
-        action: { label: '去登录', onClick: () => navigate('/login') },
-      })
-      return
-    }
     const bad = files.find((f) => !/^image\//.test(f.type))
     if (bad) {
       toast.error(`${bad.name} 不是图片`)
@@ -517,13 +503,6 @@ export default function EditorPage() {
               e.preventDefault()
               const files = Array.from(e.dataTransfer.files || [])
               if (!files.length) return
-              if (!isAuthenticated) {
-                toast.error('上传图片需要先登录', {
-                  description: '编辑和复制不需要登录',
-                  action: { label: '去登录', onClick: () => navigate('/login') },
-                })
-                return
-              }
               setFrameTask({ files, mode: 'loose' })
             }}
           >

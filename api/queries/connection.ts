@@ -33,7 +33,8 @@ function openDatabase(): DatabaseSync {
       ownerId INTEGER NOT NULL,
       name TEXT,
       size INTEGER NOT NULL,
-      createdAt INTEGER NOT NULL
+      createdAt INTEGER NOT NULL,
+      visitor TEXT
     );
 
     CREATE TABLE IF NOT EXISTS docs (
@@ -56,6 +57,17 @@ function openDatabase(): DatabaseSync {
   if (!columns.some((c) => c.name === 'savedAt')) {
     db.exec('ALTER TABLE docs ADD COLUMN savedAt INTEGER')
   }
+
+  // Same for uploads that arrive without a login: older databases have no
+  // `visitor` column, and every anonymous query filters on it. ALTER appends,
+  // which is why the column is declared last in db/schema.ts too. The index has
+  // to wait for the column — on an upgraded database the CREATE TABLE above is a
+  // no-op, so indexing it there would fail.
+  const fileColumns = db.prepare('PRAGMA table_info(files)').all() as { name: string }[]
+  if (!fileColumns.some((c) => c.name === 'visitor')) {
+    db.exec('ALTER TABLE files ADD COLUMN visitor TEXT')
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS files_owner_visitor ON files (ownerId, visitor)')
 
   // One-off data migrations, recorded so they never run twice.
   db.exec(`

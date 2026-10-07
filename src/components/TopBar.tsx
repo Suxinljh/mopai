@@ -300,7 +300,7 @@ export default function TopBar(p: Props) {
           <button
             onClick={p.onLogin}
             className="ya-link-btn !px-2.5 !py-1.5 !text-[12px]"
-            title="登录后可上传图片；编辑、复制、导出无需登录"
+            title="登录后才有云端草稿箱；编辑、上传、复制、导出都不用登录"
           >
             登录
           </button>

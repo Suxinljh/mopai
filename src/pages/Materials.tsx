@@ -40,7 +40,8 @@ export default function Materials() {
   const utils = trpc.useUtils()
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const enabled = isAuthenticated
+  // 图片按「账号或这台浏览器」归属，未登录也能看自己的
+  const enabled = !authLoading
   // 本地草稿引用的图也算“在用”，避免误判成可清理的旧图
   const draftKeys = useMemo(() => localDraftKeys(), [])
   const stats = trpc.storage.stats.useQuery(undefined, { enabled, retry: false })
@@ -87,53 +88,49 @@ export default function Materials() {
     return <Shell onBack={() => navigate('/')}><p className="text-[13px] text-[#9A9A9A]">读取中…</p></Shell>
   }
 
-  if (!isAuthenticated) {
-    return (
-      <Shell onBack={() => navigate('/')}>
-        <div className="ya-well p-6">
-          <p className="text-[13px] leading-relaxed text-[#394560]">
-            素材库需要登录才能查看——图片是按账号归属的。
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="ya-btn ya-btn-primary mt-4"
-          >
-            去登录
-          </button>
-        </div>
-      </Shell>
-    )
-  }
-
   return (
     <Shell onBack={() => navigate('/')}>
       <div className="space-y-4">
         {/* 用量 */}
-        <section className="ya-well p-5">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-[14px] font-semibold text-[#0E1525]">存储用量</h2>
-            <span className="text-[12px] text-[#6B7793]">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
-          </div>
-          <div className="mt-3 flex items-end gap-4">
-            <div>
-              <p className="text-[26px] font-bold tabular-nums leading-none text-[#0E1525]" style={{ fontFamily: 'var(--font-mono)' }}>
-                {formatBytes(stats.data?.totalBytes ?? 0)}
-              </p>
-              <p className="mt-1 text-[12px] text-[#6B7793]">
-                共 {stats.data?.count ?? 0} 张 · 上限 {formatBytes(stats.data?.quotaBytes ?? 0)}
-              </p>
+        {isAuthenticated ? (
+          <section className="ya-well p-5">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-[14px] font-semibold text-[#0E1525]">存储用量</h2>
+              <span className="text-[12px] text-[#6B7793]">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
             </div>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#DEE3EC]" style={{ boxShadow: 'var(--shadow-inset)' }}>
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${Math.max(usagePct, stats.data?.count ? 1.5 : 0)}%`, background: usagePct > 85 ? 'var(--error-500)' : 'var(--primary-500)' }}
-            />
-          </div>
-          <p className="mt-2 text-[11px] text-[#6B7793]">
-            图片存在 Cloudflare R2，按整个桶计量。这里显示的是本工具自己记的账。
-          </p>
-        </section>
+            <div className="mt-3 flex items-end gap-4">
+              <div>
+                <p className="text-[26px] font-bold tabular-nums leading-none text-[#0E1525]" style={{ fontFamily: 'var(--font-mono)' }}>
+                  {formatBytes(stats.data?.totalBytes ?? 0)}
+                </p>
+                <p className="mt-1 text-[12px] text-[#6B7793]">
+                  共 {stats.data?.count ?? 0} 张 · 上限 {formatBytes(stats.data?.quotaBytes ?? 0)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#DEE3EC]" style={{ boxShadow: 'var(--shadow-inset)' }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.max(usagePct, stats.data?.count ? 1.5 : 0)}%`, background: usagePct > 85 ? 'var(--error-500)' : 'var(--primary-500)' }}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-[#6B7793]">
+              图片存在 Cloudflare R2，按整个桶计量。这里显示的是本工具自己记的账。
+            </p>
+          </section>
+        ) : (
+          <section className="ya-well p-5">
+            <h2 className="text-[14px] font-semibold text-[#0E1525]">这台浏览器上传的图</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-[#394560]">
+              共 {stats.data?.count ?? 0} 张 · {formatBytes(stats.data?.totalBytes ?? 0)}。
+              上传不用登录，图片按浏览器归属；换设备或清掉站点数据就看不到了。
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-[#6B7793]">
+              每 24 小时最多 {stats.data?.dailyImages ?? 0} 张 / {formatBytes(stats.data?.dailyBytes ?? 0)}——
+              图床是共享的免费额度，用完明天自动恢复。
+            </p>
+          </section>
+        )}
 
         {/* 没在用的旧图 */}
         <section className="ya-well p-5">

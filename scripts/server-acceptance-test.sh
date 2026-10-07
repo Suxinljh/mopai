@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-# Acceptance test for 墨排 on cc-tokyo-01.
-# Runs ON the server: authenticates against the app via the Cloudflare Access
-# identity headers so the full app + R2 chain is exercised without a browser.
+# Acceptance test for 公众号排版助手 on cc-tokyo-01.
+# Runs ON the server against 127.0.0.1:3100, so it exercises the full app + R2
+# chain without a browser and without going through Cloudflare.
 set -uo pipefail
 
 APP="http://127.0.0.1:3100"
-EMAILDOMAIN="yoru-and-akari.dev"
-ACCESS_EMAIL="${ACCESS_ALLOW_EMAIL:?set ACCESS_ALLOW_EMAIL to the Access allowlist email}"
 
 ACCESS_KEY=$(sudo grep '^ACCESS_KEY=' /opt/mopai/app/.env | cut -d= -f2-)
 echo "access key loaded (len=${#ACCESS_KEY})"
-
-H_ACCESS=(-H "Cf-Access-Authenticated-User-Email: $ACCESS_EMAIL" -H "Cf-Access-Jwt-Assertion: test")
 
 echo
 echo "### 1. app reachable, SPA fallback"
@@ -63,12 +59,51 @@ if [ -n "$KEY" ]; then
   echo "$KEY" > /tmp/mopai-test-key
 fi
 
-echo
-echo "### 9. upload without session is refused (the gate)"
-curl -4 -sS -m 15 -X POST -H 'Content-Type: application/json' \
-  -d "{\"json\":{\"name\":\"nope.png\",\"contentBase64\":\"$PNG_B64\",\"contentType\":\"image/png\"}}" \
-  "$APP/api/trpc/storage.upload" | head -c 260; echo
+FAILURES=0
+verdict() {  # verdict LABEL OK
+  if [ "$2" = "1" ]; then echo "  [PASS] $1"; else echo "  [FAIL] $1"; FAILURES=$((FAILURES + 1)); fi
+}
 
-rm -f "$COOKIE_JAR"
 echo
-echo "### done"
+echo "### 9. upload without a session now works (the gate is gone)"
+ANON_JAR=$(mktemp)
+ANON_UP=$(curl -4 -sS -m 30 -c "$ANON_JAR" -X POST -H 'Content-Type: application/json' \
+  -d "{\"json\":{\"name\":\"anon-acceptance.png\",\"contentBase64\":\"$PNG_B64\",\"contentType\":\"image/png\"}}" \
+  "$APP/api/trpc/storage.upload")
+echo "  $ANON_UP"
+ANON_KEY=$(printf '%s' "$ANON_UP" | python3 -c 'import sys,json,re; m=re.search(r"\"key\":\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")')
+verdict "anonymous upload accepted" "$([ -n "$ANON_KEY" ] && echo 1 || echo 0)"
+verdict "visitor cookie minted" "$(grep -q mopai_vid "$ANON_JAR" && echo 1 || echo 0)"
+
+echo
+echo "### 10. an anonymous visitor only sees their own images"
+ANON_LIST=$(curl -4 -sS -m 10 -b "$ANON_JAR" "$APP/api/trpc/storage.list")
+echo "  $(printf '%s' "$ANON_LIST" | head -c 300)"
+verdict "the owner's image is not in the anonymous list" \
+  "$([ -n "$KEY" ] && ! printf '%s' "$ANON_LIST" | grep -q "$KEY" && echo 1 || echo 0)"
+verdict "the anonymous image is" "$(printf '%s' "$ANON_LIST" | grep -q 'anon-acceptance' && echo 1 || echo 0)"
+
+echo
+echo "### 11. markup renamed to .png is still refused"
+HTML_B64=$(printf '%s' '<html><script>alert(1)</script></html>' | base64 -w0)
+BAD=$(curl -4 -sS -m 15 -b "$ANON_JAR" -X POST -H 'Content-Type: application/json' \
+  -d "{\"json\":{\"name\":\"evil.png\",\"contentBase64\":\"$HTML_B64\",\"contentType\":\"image/png\"}}" \
+  "$APP/api/trpc/storage.upload")
+echo "  $(printf '%s' "$BAD" | head -c 260)"
+verdict "BAD_REQUEST on non-image bytes" "$(printf '%s' "$BAD" | grep -q 'BAD_REQUEST' && echo 1 || echo 0)"
+
+echo
+echo "### 12. clean up the anonymous test image"
+DEL=$(curl -4 -sS -m 20 -b "$ANON_JAR" -X POST -H 'Content-Type: application/json' \
+  -d "{\"json\":{\"key\":\"$ANON_KEY\"}}" "$APP/api/trpc/storage.remove")
+echo "  $DEL"
+verdict "the anonymous caller can delete its own image" "$(printf '%s' "$DEL" | grep -q '"ok":true' && echo 1 || echo 0)"
+
+rm -f "$COOKIE_JAR" "$ANON_JAR"
+echo
+if [ "$FAILURES" -eq 0 ]; then
+  echo "### done — all checks passed"
+else
+  echo "### done — $FAILURES CHECK(S) FAILED"
+  exit 1
+fi

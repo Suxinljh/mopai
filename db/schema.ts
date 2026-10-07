@@ -2,6 +2,12 @@ import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 
 // Upload ledger. Only keys are stored — never URLs, since a key is what the
 // worker turns into a stable public address.
+//
+// Uploads without a login get `ownerId` 0 and belong to the browser named by
+// `visitor` (a hash of the visitor cookie); owner uploads leave it null. The
+// column is declared last so the schema order matches a table upgraded by
+// `ALTER TABLE ... ADD COLUMN`, which appends — the sqlite-proxy driver maps
+// rows positionally.
 export const files = sqliteTable("files", {
   key: text("key").primaryKey(),
   ownerId: integer("ownerId").notNull(),
@@ -10,6 +16,7 @@ export const files = sqliteTable("files", {
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
+  visitor: text("visitor"),
 });
 
 export type FileRow = typeof files.$inferSelect;

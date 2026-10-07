@@ -42,9 +42,13 @@ harness 会在父仓库自建分支或 worktree。并行干活必须遵守：
   - `npm run verify:themes` — 111 项离线校验（主题红线、比例、删除、驱动契约）
   - `npm run import:themes` — 从上游克隆重新生成 `src/lib/themes-imported/`（上游位置见 THEME-SOURCES.md）
   - `node scripts/cdp-verify-theme-library.mjs <url> <key> 9334` — 模板库页的真实浏览器验收
+  - `node scripts/cdp-verify-public-access.mjs <url> 9335` — **不登录**走一遍上传全链路的真实浏览器验收
+  - `bash scripts/cf-open-public.sh --check|--plan|（空）` — Cloudflare 门禁开关（撤 Access + 并入威胁分数规则）
   - `npm run dev` — 本地开发
 
 本地身份可以随便填，`ACCESS_KEY` / `SESSION_SECRET` 用 `.env.example` 里的占位值即可。
+测匿名额度不用等一天：起服务时压小就行，例如
+`ANON_DAILY_IMAGES=2 ANON_DAILY_BYTES=1048576 ANON_TOTAL_BYTES=10485760`。
 
 ---
 
@@ -122,12 +126,15 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 | 站点 | cc-tokyo-01 `/opt/mopai/app`，Node 直跑 `dist/boot.js`，监听 **127.0.0.1:3100** |
 | 进程 | `mopai.service`（systemd，内存上限 384M，实测吃 ~35MB）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev`，tunnel id `1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14`（ingress 在服务器 `/etc/cloudflared/mopai.yml`） |
-| 门禁 | Cloudflare Access 邮箱验证（只放行仓库所有者的邮箱，168h 会话；具体地址不进仓库） |
-| 图片公网读 | 独立 Access 应用放行 `wechat.yoru-and-akari.dev/api/img/*`（**微信抓图必须能匿名访问**，否则粘贴到公众号后图全丢）。换域名时这条必须同步改，Zero Trust → Access → Applications |
+| 门禁 | **站点公开，没有 Cloudflare Access**（2026-10-07 撤掉，之前是邮箱验证只放行站长）。`ACCESS_KEY` 只决定谁能用云端草稿箱；排版、上传、复制、导出都不用登录 |
+| 图片公网读 | 站点公开之后 `/api/img/*` 自然是公网可读（微信抓图必须匿名可达）。以前那个 bypass Access 应用已随之删除 |
+| 防滥用 | 应用层四道（IP 突发限流 / 访客 24h 额度 / 匿名总量封顶 / 字节头判类型）+ zone 上已有的 WAF 规则。细节与「刻意没做的三件事」见 `app/README.md`「公开之后靠什么挡滥用」 |
 | 图片存储 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite，`/opt/mopai/app/data/mopai.db` |
 | SSH | `ssh cc-tokyo-01` |
-| Cloudflare token | WSL 里 `~/.config/codex/private.env` 的 `CLOUDFLARE_API_TOKEN`，**不要硬编码、不要提交** |
+| Cloudflare token | 环境里的 `CLOUDFLARE_API_TOKEN` **是只读的**：读接口正常，写接口一律回 `HTTP 405` + 错误码 `10405 Method not allowed for this authentication scheme`（看着像方法不对，其实是 token scope 不够）。改 Access / WAF 规则要先换一个带 `Zone → Rulesets Edit` + `Account → Access → Apps and Policies Edit` 的 token。**不要硬编码、不要提交**。`~/.config/codex/private.env` 里已经没有这个变量了（只剩 SILICONFLOW_API_KEY），旧脚本的 `source` 那行会静默拿到空值 |
+| Cloudflare 标识 | account `5e96dfd2bf22d385e4ffdaa794d74676`；zone `yoru-and-akari.dev` = `4f9b5c7236e63090439676eec70031e2`（**Free 计划**）；ruleset：自定义规则 `3478aaf3df1b4d8eb385f7dadc47d3c6`、速率限制 `b002f9cb15564f3a9b560efe95f138eb` |
+| Cloudflare 免费额度现状 | 自定义规则 **5/5 已用满**（telegram webhook、扫描器 UA、app 域威胁分数 challenge、路径穿越、危险方法），速率限制 **1/1 已用掉**（`feedback-rl-5pm`，`/feedback` POST 5 req/10s）。所以本项目**不能再加规则**，只能并入既有的；上传防洪放在应用层。别以为 zone 是空的——`GET /zones/{z}/rulesets` 的列表里 `rules` 是空的，必须逐个 `GET /zones/{z}/rulesets/{id}` 才看得到规则 |
 
 ### 部署流程（**服务器上不要跑 npm ci**，2GB 内存会 OOM）
 
@@ -225,7 +232,10 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
 5. **tRPC 的错误是 HTTP 200 + error 信封**，`curl | head -c` 会吞掉信号。测试脚本要显式检查有没有 `result` 信封、有没有 `NaN`。
 6. **会话 cookie 是 `Secure`**，本地/服务器上用纯 HTTP 测试时 curl 的 cookie jar 会静默丢弃它——改成手工捕获 `set-cookie` 头回放。
 7. **round2 验收脚本**断言的是"增量"而不是绝对值（别的脚本会留下自己的测试图），并且预清理只删**它自己生成的文件名**。别改成"把现有的都删掉"——前一轮就是这样误删了用户的真实上传。
-8. **服务器数据库里有一篇示例稿**（`<SAMPLE_COMPANY>生态稿 · 示例`），`savedAt` 为 null。别在诊断时对它跑无差别 DELETE。
+8. **默认示例稿已脱敏**（2026-10-07）：`src/lib/sample.ts` 的 `SAMPLE_DOC` 以前是站长公司的宣传稿，随公开仓库外泄过，现已换成中性的「示例稿 · 语法速览」（覆盖全部语法，同时是 golden 主题的验收样例）。**服务器数据库里还留着旧的那一行**（`<SAMPLE_COMPANY>生态稿 · 示例`，`ownerId=1`、`savedAt` 为 null），那是站长私有数据、登录后才读得到；别在诊断时对它跑无差别 DELETE。
+9. **给 `files` 加列必须加在最后**。drizzle 的 `sqlite-proxy` 驱动按**位置**映射行，而 `ALTER TABLE ... ADD COLUMN` 只会追加到末尾；`db/schema.ts` 里声明的顺序一旦和物理顺序不一致，读出来的字段会整体错位，而且**不报错**。`api/queries/files-upgrade.test.ts` 就是钉这件事的。同理，`CREATE INDEX` 引用新列必须放在 `ALTER` 之后——旧库上 `CREATE TABLE IF NOT EXISTS` 是 no-op，先建索引会直接 `no such column`。
+10. **改 Cloudflare 之前先确认 token 能写**。只读 token 的写操作回 `HTTP 405 / 10405`，不是「权限不足」那种一眼能认的错。免费额度已经用满（见部署形态表），加规则前先 `bash scripts/cf-open-public.sh --check` 看清 zone 上已有什么。
+11. **脚本里调 tRPC：查询用 GET，变更用 POST**。用 POST 打查询会得到 `Unsupported POST-request to query procedure`，而 HTTP 状态还是 200，很容易误判成"接口坏了"。
 
 ---
 
@@ -255,24 +265,34 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
   选它是因为主题库含 6 套 AGPL 与 2 套 GPL-3.0 主题（兼容性逐族核对见 `THEME-SOURCES.md` 第四节）。
   操作红线：**开源发布不得晚于部署**——AGPL 第 13 条覆盖线上服务，仓库没公开之前
   部署含 copyleft 主题的构建就是未履行源码提供义务。
+- **公开上线（2026-10-07 用户拍板）**：仓库开源之后，站点也直接对公众开放——撤掉 Cloudflare Access，
+  **上传图片不再需要口令**。`ACCESS_KEY` 保留，但语义收窄成「站长的云端草稿箱钥匙」。
+  默认示例稿同时脱敏（见坑 8）。代价是匿名上传成了公开写入面，`ANON_*` 那四个额度旋钮
+  从此是**承重结构**，不是可调可不调的选项：改宽之前先想清楚谁在替你付 R2 的钱。
 - **多人登录 / 收费**：远期方向，**先不做**。现在只记录意向：等功能完善、开源之后，再考虑多用户与付费模式。届时现在的「单口令 + 单用户空间」要拆成真实账号体系，这是大工程，别提前埋半吊子抽象。
+  2026-10-07 之后多了一小块地基：匿名访客已经有稳定身份（`mopai_vid` Cookie → `files.visitor` 存哈希），
+  图片按访客隔离；但**稿件仍然只有站长能存云端**，匿名稿件只在浏览器里。别把访客身份当成账号体系的雏形去扩。
 
 按价值排序：
 
 ### 中
 
 1. **`storage.orphans` 不覆盖另一台设备的未同步草稿**：本地草稿 key 通过 `alsoKeep` 传，但只覆盖**本机** localStorage。另一台设备的草稿引用的图可能被误判为孤儿。要根治得让草稿也同步。
+2. **匿名图片没有回收机制，`ANON_TOTAL_BYTES` 会一次性填满**：清理只能由上传者自己在素材库里点，
+   而他大概率再也不回来。总量撞到 1.5 GB 之后**所有人都传不了图**，且不会自愈。
+   要修就得有个按时间/引用情况的后台清理（例如超过 N 天且不被任何稿件引用的匿名图删掉），
+   或者把总额度调高并盯着 R2 用量。上线后先看真实增长速率再决定阈值。
 
 ### 低
 
-2. **没有导出/导入整包稿件**：多设备迁移或备份只能靠逐篇复制。
-3. **`useDocs` 脏标记全量比较**：`lastSavedRef` 是 Map<id, content>，每次改动全量比较，稿多了可能变慢。
-4. **代码块里的 `![](...)` 会被图片扫描器计数**：`scanImageOccurrences` 对原文做纯正则、不剔除 ``` 围栏，正文里贴 markdown 示例代码会让 occurrence 错位（上传回填/轮播比例可能写错位置）。概率低，修法是把 fence 区间从扫描里排除。
+3. **没有导出/导入整包稿件**：多设备迁移或备份只能靠逐篇复制。
+4. **`useDocs` 脏标记全量比较**：`lastSavedRef` 是 Map<id, content>，每次改动全量比较，稿多了可能变慢。
+5. **代码块里的 `![](...)` 会被图片扫描器计数**：`scanImageOccurrences` 对原文做纯正则、不剔除 ``` 围栏，正文里贴 markdown 示例代码会让 occurrence 错位（上传回填/轮播比例可能写错位置）。概率低，修法是把 fence 区间从扫描里排除。
 
 ### 探索性
 
-5. **轮播比例改动后，旧图需手动重裁**：现在只提示"N 张图还是旧比例"。能不能批量重裁？或自动提示？
-6. **`img:` 协议跨域**：复制到公众号后，微信转存图片，但如果 R2 挂了，正文会裂图。是否有降级方案？
+6. **轮播比例改动后，旧图需手动重裁**：现在只提示"N 张图还是旧比例"。能不能批量重裁？或自动提示？
+7. **`img:` 协议跨域**：复制到公众号后，微信转存图片，但如果 R2 挂了，正文会裂图。是否有降级方案？
 
 ---
 

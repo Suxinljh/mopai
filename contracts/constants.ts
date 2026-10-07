@@ -4,6 +4,6 @@ export const Session = {
 } as const;
 
 export const ErrorMessages = {
-  unauthenticated: "需要登录后才能上传图片",
+  unauthenticated: "需要登录后才能使用云端草稿箱",
   insufficientRole: "权限不足",
 } as const;

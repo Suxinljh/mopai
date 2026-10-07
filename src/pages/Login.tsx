@@ -55,7 +55,7 @@ export default function Login() {
           <p className="mt-3 text-center text-[12px] text-[#A23F3F]">{loginMutation.data?.message}</p>
         )}
         <p className="mt-4 text-center text-[12px] leading-relaxed text-[#6B7793]">
-          只有上传图片需要口令；编辑、排版、复制和导出都可以直接使用。
+          口令只用来打开站长自己的云端草稿箱；排版、上传图片、复制和导出都不用登录。
         </p>
       </div>
     </div>
