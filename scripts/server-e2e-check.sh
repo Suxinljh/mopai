@@ -5,7 +5,7 @@
 set -uo pipefail
 
 APP="http://127.0.0.1:3100"
-PUBLIC="https://mopai.yoru-and-akari.dev"
+PUBLIC="https://wechat.yoru-and-akari.dev"
 ENV_FILE=/opt/mopai/app/.env
 
 ACCESS_KEY=$(sudo grep '^ACCESS_KEY=' "$ENV_FILE" | cut -d= -f2-)

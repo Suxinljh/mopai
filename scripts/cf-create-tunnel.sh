@@ -7,7 +7,7 @@ set -a; source $HOME/.config/codex/private.env 2>/dev/null; set +a
 ACC=5e96dfd2bf22d385e4ffdaa794d74676
 ZONE=4f9b5c7236e63090439676eec70031e2
 NAME=mopai
-HOST=mopai.yoru-and-akari.dev
+HOST=wechat.yoru-and-akari.dev
 AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
 
 echo "=== existing tunnels ==="

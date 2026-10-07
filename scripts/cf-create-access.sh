@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create the Cloudflare Access application + email policy for 墨排. Idempotent.
 #
-# Scope: mopai.yoru-and-akari.dev only. Image reads go to mopai-img.yoru-and-akari.dev
+# Scope: wechat.yoru-and-akari.dev only. Image reads go to mopai-img.yoru-and-akari.dev
 # (a Worker custom domain), which is deliberately NOT covered here — WeChat has to
 # be able to fetch the images when it re-hosts them.
 set -uo pipefail
@@ -10,7 +10,7 @@ set -a; source $HOME/.config/codex/private.env 2>/dev/null; set +a
 ACC=5e96dfd2bf22d385e4ffdaa794d74676
 AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
 APP_NAME="墨排 Mopai"
-APP_DOMAIN="mopai.yoru-and-akari.dev"
+APP_DOMAIN="wechat.yoru-and-akari.dev"
 ALLOW_EMAIL="<ACCESS_ALLOW_EMAIL>"
 IDP_ID="02dc55ac-e7e2-4623-b699-ff8bdcb4f825"
 SESSION="168h"
@@ -81,7 +81,7 @@ for p in json.load(sys.stdin).get("result",[]):
 # so this app wins over the site-wide one above while everything else on the
 # hostname stays gated.
 # ---------------------------------------------------------------------------
-IMG_APP_DOMAIN="mopai.yoru-and-akari.dev/api/img/*"
+IMG_APP_DOMAIN="wechat.yoru-and-akari.dev/api/img/*"
 
 echo
 echo "=== find existing app for $IMG_APP_DOMAIN ==="

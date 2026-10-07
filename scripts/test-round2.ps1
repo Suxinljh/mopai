@@ -1,6 +1,6 @@
 # Exercise the round-2 features against a running 墨排 instance.
 #   pwsh -File scripts/test-round2.ps1 -Base http://127.0.0.1:3199 -EnvFile .env
-#   pwsh -File scripts/test-round2.ps1 -Base https://mopai.yoru-and-akari.dev -AccessEmail you@example.com
+#   pwsh -File scripts/test-round2.ps1 -Base https://wechat.yoru-and-akari.dev -AccessEmail you@example.com
 param(
     [string]$Base = 'http://127.0.0.1:3199',
     [string]$EnvFile = '.env',

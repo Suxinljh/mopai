@@ -4,13 +4,13 @@
 #   app user        : mopai (no login shell)
 #   app dir         : /opt/mopai/app   (dist/ + .env + data/)
 #   port            : 3100 (3000 is taken by another service)
-#   tunnel unit     : cloudflared-mopai.service -> mopai.yoru-and-akari.dev
+#   tunnel unit     : cloudflared-mopai.service -> wechat.yoru-and-akari.dev
 set -euo pipefail
 
 TUNNEL_ID=1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14
 APP_USER=mopai
 APP_DIR=/opt/mopai/app
-HOSTNAME_APP=mopai.yoru-and-akari.dev
+HOSTNAME_APP=wechat.yoru-and-akari.dev
 PORT=3100
 
 echo "== 1. app user =="

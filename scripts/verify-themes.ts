@@ -15,7 +15,7 @@ fs.mkdirSync(OUT, { recursive: true })
 const sig = { layout: 'Yoru', proof: 'Yoru', review: 'Yoru' }
 // Same resolver the editor uses, pointed at the deployed image host.
 const resolveImg = (s: string) =>
-  s.startsWith('img:') ? `https://mopai.yoru-and-akari.dev/api/img/${s.slice(4)}` : s
+  s.startsWith('img:') ? `https://wechat.yoru-and-akari.dev/api/img/${s.slice(4)}` : s
 
 const parsed = parseMarkdown(SAMPLE_DOC)
 
@@ -120,10 +120,10 @@ for (const theme of THEMES) {
   const withImg = `# 标题\n\n![配图说明](img:abc123-key.png)\n\n正文一段。\n`
   const doc = parseMarkdown(withImg)
   const html = renderDoc(doc, THEMES[0], sig, resolveImg).html
-  const expected = 'https://mopai.yoru-and-akari.dev/api/img/abc123-key.png'
+  const expected = 'https://wechat.yoru-and-akari.dev/api/img/abc123-key.png'
   check('protocol', 'img:key resolves to absolute /api/img/ URL', html.includes(expected),
     html.includes('img:') ? 'raw img: leaked' : '')
-  check('protocol', 'resolved image renders a real <img>', /<img [^>]*src="https:\/\/mopai/.test(html))
+  check('protocol', 'resolved image renders a real <img>', /<img [^>]*src="https:\/\/wechat/.test(html))
   check('protocol', 'resolved image keeps its caption text', html.includes('图1 配图说明'))
 
   const noSrc = renderDoc(parseMarkdown(`![待补图]()\n`), THEMES[0], sig, resolveImg).html
@@ -154,7 +154,7 @@ for (const theme of THEMES) {
       `${f.width}x${f.height} vs ${r}`)
     // 轮播里的 img:key 也必须被解析成绝对地址（曾经漏掉，导致整条轮播裂图）
     check(r, 'carousel slides resolve img:key to an absolute URL',
-      !/src="img:/.test(html) && (html.match(/src="https:\/\/mopai\.yoru-and-akari\.dev\/api\/img\//g) || []).length === 2)
+      !/src="img:/.test(html) && (html.match(/src="https:\/\/wechat\.yoru-and-akari\.dev\/api\/img\//g) || []).length === 2)
   }
 
   // 老稿件没写比例，必须照旧能渲染
