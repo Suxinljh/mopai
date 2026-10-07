@@ -17,24 +17,22 @@
 ## 一、项目位置与环境
 
 ```
-仓库根目录：<umbrella repo root>\app
+仓库根目录：<umbrella repo root>   ← git 仓库（伞仓库）
+应用代码：  <umbrella repo root>\app   ← npm/构建/部署都在这里跑
 ```
 
-注意**根目录下还有别的项目**（signin、vote-slider、媒体拼图 等），别搞错。`app/` 才是本项目，它自己是一个 git 仓库（父目录不是仓库，历史如此：项目最早只有 app/，git 就 init 在 app/ 里）。品牌：产品名「公众号排版助手」、署名「by Yoru」，常量在 `src/lib/brand.ts`；logo 是 YORU 设计系统的月相行「新月-上弦-满月-下弦」（`src/components/YoruMark.tsx`，3b 变体，满月用品牌靛青 #2E4A68），favicon 是弦月（`public/favicon.svg`）。localStorage key 沿用历史前缀 `mopai.*`（内部标识，用户不可见，不要改，改了丢老数据）。
+**仓库结构（2026-10-07 变更）**：app 原本是独立 git 仓库（项目最早只有它，`git init` 在 app/ 里）；为了让 harness 能在父目录层级建分支并行开发，仓库已上移到父目录——app/ 的**全部提交历史原样保留**（hash 不变，作为 merge commit `767661c` 的第二父）。app/.git 已删除，现在全目录只有一个 `.git`（父目录）。旧 .git 备份在 `<local archive>\app-git-backup-20261007\`（确认稳定后可删）。父目录下还有 signin/、vote-slider/、媒体拼图/ 等小项目，已一并纳入版本管理。
 
-### 多工作树（worktree）并行纪律
+品牌：产品名「公众号排版助手」、署名「by Yoru」，常量在 `app/src/lib/brand.ts`；logo 是 YORU 设计系统的月相行「新月-上弦-满月-下弦」（`app/src/components/YoruMark.tsx`，3b 变体，满月用品牌靛青 #2E4A68），favicon 是弦月（`app/public/favicon.svg`）。localStorage key 沿用历史前缀 `mopai.*`（内部标识，用户不可见，不要改，改了丢老数据）。
 
-仓库有两个 worktree（`git worktree list` 可查）：
+### 多 AI 并行纪律（分支/worktree 都在这个伞仓库上开）
 
-- `app/` —— 主树，分支 `master`
-- `app-wt-2/` —— 并行树，分支 `wip-parallel`（第二个 AI 在这里干活）
+harness 会在父仓库自建分支或 worktree。并行干活必须遵守：
 
-两棵树共享同一个 `.git`，但工作区、node_modules、分支各自独立。并行干活必须遵守：
-
-1. **端口错开**：本地测试服与 CDP 调试端口不能撞车。主树用 `PORT=3200` + CDP `9333`；并行树用 `PORT=3201` + CDP `9334`（CDP 脚本都接受端口参数或改文件里的常量）。
-2. **.env 不随 worktree**（gitignore）：新树建好后手动从主树复制 `.env`，测试数据库按惯例用环境变量覆盖成独立文件（`DATABASE_URL=file:./data/test-xxx.db`），绝不共享。
-3. **部署只许一棵树执行**：线上只有一个。谁的活先在本地全绿（check + verify:themes + test + CDP），谁把分支合回 `master`、由**主树**统一构建部署。并行树不要碰 `install.sh` / scp / 服务器。
-4. **合并顺序**：并行树开工前先 `git merge master` 同步；交付时在并行树上提交，回主树 `git merge wip-parallel`（或用户指定的方式），冲突按功能归属取舍。
+1. **工作目录**：不管哪棵树、哪个分支，npm 命令（check/build/test/CDP）都在其 `app/` 子目录里跑。新 worktree 建好后要在其 `app/` 里 `npm ci`，并从主工作区复制 `app/.env`（gitignore 不随仓库走）。
+2. **端口错开**：本地测试服与 CDP 调试端口不能撞车。主工作区用 `PORT=3200` + CDP `9333`；第二棵树用 `PORT=3201` + CDP `9334`（CDP 脚本接受端口参数或改文件内常量）。测试数据库按惯例用环境变量覆盖成独立文件（`DATABASE_URL=file:./data/test-xxx.db`），绝不共享。
+3. **部署只许从 master 主工作区执行**：线上只有一个。功能在分支上验证全绿（check + verify:themes + test + CDP）后合回 `master`，由主工作区统一构建、scp、`install.sh`。分支上的人不碰服务器。
+4. **合并顺序**：分支开工前先 `git merge master` 同步；交付在分支上提交，回合由主工作区执行，冲突按功能归属取舍。
 
 - Node 20+（本机 v24），`npm ci` 装依赖
 - `.env` 从 `.env.example` 复制（`.env` 已被 gitignore，**永远不要提交**）
