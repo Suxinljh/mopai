@@ -189,15 +189,15 @@ python -m git_filter_repo --force \
 ```bash
 # 在伞仓库里：<base> = 公开仓库当前镜像到的那个伞提交
 git format-patch --binary <base>..master -- app/     # -o 只能写仓库内；落在根目录后移走
-python _publish/scrub.py <伞根>/publish-scrub-expressions.txt <补丁目录>
+python app/scripts/publish-scrub.py publish-scrub-expressions.txt <补丁目录> --incremental
 # 在公开克隆里
 git am -p2 <补丁目录>/0*.patch                        # -p2 剥掉 a/app/ 前缀
 git push origin master                                # 普通推送，不是 force
 ```
 
-**坑：增量时要把表里 2026-10-07 新增的那两条公司名规则（表格末尾带注释的那组）去掉再 scrub。**
-公开历史的基线是用旧表跑出来的，那两处仍是原文；补丁的上下文行一旦被替换成占位符，
-`git am` 就报 `patch does not apply`。这两条只对**全量重建**有意义（重建时整条历史一起换）。
+**坑：`--incremental` 是必须的。** 表里带 `# rebuild-only:` 标记的那组规则是 2026-10-07 之后加的，
+公开历史的基线是用旧表跑出来的，那些地方仍是原文；补丁的**上下文行**一旦被替换成占位符，
+`git am` 就报 `patch does not apply`。它们只对**全量重建**有意义（重建时整条历史一起换）。
 同一条教训的另一面：**新写进公开文件的文本不要再出现这些串**，否则每次增量都得特殊处理——
 `scripts/cdp-verify-public-access.mjs` 里原本用黑名单校验脱敏，被 scrub 改成两个相同占位符后
 静默失效，现已改成正向断言示例稿自己的标题。
