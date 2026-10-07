@@ -1,12 +1,17 @@
 import type { CarouselRatio, InlineSeg, SignatureConfig } from './types'
+import { EXTRA_THEMES } from './themes-extra'
 
 // 主题 = 一组「语义节点 → 内联样式 HTML」的模板函数。
 // 新主题只新增本文件中的一个对象，稿件与解析层不变。
+
+export type ThemeCategory = '简约' | '商务' | '杂志' | '活力'
 
 export interface Theme {
   id: string
   name: string
   desc: string
+  /** 模板专区的分组 */
+  category: ThemeCategory
   // 供 UI 缩略图/标识使用
   ui: { accent: string; soft: string; ink: string }
   root(inner: string): string
@@ -88,6 +93,7 @@ export const goldenTheme: Theme = {
   id: 'golden',
   name: 'Golden Sample',
   desc: '亮蓝科技风 · 日常默认',
+  category: '杂志',
   ui: { accent: '#1677FF', soft: '#B9DAFF', ink: '#17365D' },
 
   root: (inner) =>
@@ -175,6 +181,7 @@ export const minimalTheme: Theme = {
   id: 'minimal',
   name: '极简',
   desc: '无装饰 · 纯文字层级',
+  category: '简约',
   ui: { accent: '#111111', soft: '#E5E5E5', ink: '#111111' },
 
   root: (inner) =>
@@ -270,6 +277,7 @@ export const steadyTheme: Theme = {
   id: 'steady',
   name: '稳重',
   desc: '藏青政务风 · 成果宣传',
+  category: '商务',
   ui: { accent: '#1F4E8C', soft: '#C7D8EC', ink: '#1B3A6B' },
 
   root: (inner) =>
@@ -350,7 +358,7 @@ export const steadyTheme: Theme = {
     `<p style="margin:32px 0;text-align:center;text-indent:0;font-size:12px;letter-spacing:4px;color:#C7D8EC;"><span leaf="">· · ·</span></p>`,
 }
 
-export const THEMES: Theme[] = [goldenTheme, minimalTheme, steadyTheme]
+export const THEMES: Theme[] = [goldenTheme, minimalTheme, steadyTheme, ...EXTRA_THEMES]
 
 export function getTheme(id: string): Theme {
   return THEMES.find((t) => t.id === id) || goldenTheme

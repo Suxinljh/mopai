@@ -25,7 +25,7 @@ export default function Login() {
       <div className="ya-card w-full max-w-sm p-6">
         <div className="mb-5 flex flex-col items-center gap-1 text-center">
           <span className="mb-2.5">
-            <YoruMark size={52} />
+            <YoruMark height={30} />
           </span>
           <span className="text-[19px] font-bold tracking-wide text-[#0E1525]">{APP_NAME}</span>
           <span className="ya-eyebrow">{APP_BYLINE}</span>

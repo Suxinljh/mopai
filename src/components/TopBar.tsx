@@ -65,7 +65,7 @@ export default function TopBar(p: Props) {
       {/* 左：标识 + 稿件 */}
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex items-center gap-2.5">
-          <YoruMark size={26} />
+          <YoruMark height={17} />
           <div className="flex items-baseline gap-2">
             <span className="text-[14px] font-bold tracking-wide text-[#0E1525]">{APP_NAME}</span>
             <span className="ya-eyebrow hidden lg:inline">{APP_BYLINE}</span>
@@ -135,35 +135,45 @@ export default function TopBar(p: Props) {
             </svg>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="center" className="ya-pop w-[560px] border-none p-3">
+        <PopoverContent align="center" className="ya-pop w-[600px] border-none p-3">
           <p className="ya-eyebrow mb-2 px-1">排版主题 · 当前稿件实时预览</p>
-          <div className="grid grid-cols-3 gap-2">
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => {
-                  p.onTheme(t.id)
-                  setThemeOpen(false)
-                }}
-                className={`group rounded-2xl p-2 text-left transition-all ${
-                  t.id === p.themeId ? 'ya-selected' : 'bg-[#DEE3EC] hover:bg-[#E4E9F1]'
-                }`}
-                style={t.id === p.themeId ? undefined : { boxShadow: 'var(--shadow-inset)' }}
-              >
-                <div className="relative h-32 overflow-hidden rounded-xl bg-white" style={{ boxShadow: 'var(--shadow-inset)' }}>
-                  <div
-                    className="pointer-events-none absolute left-0 top-0 origin-top-left"
-                    style={{ width: 677, transform: 'scale(0.32)' }}
-                    dangerouslySetInnerHTML={{ __html: p.miniPreview(t.id) }}
-                  />
+          <div className="max-h-[62vh] overflow-y-auto pr-0.5">
+            {(['简约', '商务', '杂志', '活力'] as const).map((cat) => {
+              const list = THEMES.filter((t) => t.category === cat)
+              if (!list.length) return null
+              return (
+                <div key={cat} className="mb-3">
+                  <p className="mb-1.5 px-1 text-[10px] font-semibold tracking-[0.12em] text-[#A1ABBF]">{cat}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {list.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          p.onTheme(t.id)
+                          setThemeOpen(false)
+                        }}
+                        className={`group rounded-2xl p-2 text-left transition-all ${
+                          t.id === p.themeId ? 'ya-selected' : 'bg-[#DEE3EC] hover:bg-[#E4E9F1]'
+                        }`}
+                        style={t.id === p.themeId ? undefined : { boxShadow: 'var(--shadow-inset)' }}
+                      >
+                        <div className="relative h-20 overflow-hidden rounded-lg bg-white" style={{ boxShadow: 'var(--shadow-inset)' }}>
+                          <div
+                            className="pointer-events-none absolute left-0 top-0 origin-top-left"
+                            style={{ width: 677, transform: 'scale(0.26)' }}
+                            dangerouslySetInnerHTML={{ __html: p.miniPreview(t.id) }}
+                          />
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-1.5 px-0.5">
+                          <span className="ya-dot" style={{ background: t.ui.accent }} />
+                          <span className="text-[12px] font-medium text-[#0E1525]">{t.name}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-2 flex items-center gap-1.5 px-0.5">
-                  <span className="ya-dot" style={{ background: t.ui.accent }} />
-                  <span className="text-[12px] font-medium text-[#0E1525]">{t.name}</span>
-                </div>
-                <p className="px-0.5 text-[11px] text-[#6B7793]">{t.desc}</p>
-              </button>
-            ))}
+              )
+            })}
           </div>
           <button
             onClick={() => {

@@ -116,6 +116,14 @@ export default function Themes() {
     return Object.fromEntries(THEMES.map((t) => [t.id, renderDoc(doc, t, sig).html]))
   }, [sig])
 
+  // 分组顺序固定：简约 → 商务 → 杂志 → 活力
+  const groups = useMemo(() => {
+    const order = ['简约', '商务', '杂志', '活力'] as const
+    return order
+      .map((cat) => ({ cat, themes: THEMES.filter((t) => t.category === cat) }))
+      .filter((g) => g.themes.length > 0)
+  }, [])
+
   const useTheme = (t: Theme) => {
     const s = loadSettings()
     saveSettings({ ...s, themeId: t.id })
@@ -131,7 +139,7 @@ export default function Themes() {
           ← 回到编辑器
         </button>
         <div className="flex items-center gap-2.5">
-          <YoruMark size={24} />
+          <YoruMark height={15} />
           <span className="text-[15px] font-bold tracking-wide text-[#0E1525]">模板</span>
           <span className="ya-eyebrow">{APP_NAME} · {APP_BYLINE}</span>
         </div>
@@ -140,17 +148,26 @@ export default function Themes() {
         <p className="mb-4 text-[13px] leading-relaxed text-[#6B7793]">
           同一段样例文字，按各模板真实渲染。选中后回到编辑器，你的正文会立刻换成新模板；随时可换回来。
         </p>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {THEMES.map((t) => (
-            <ThemeCard
-              key={t.id}
-              theme={t}
-              active={t.id === themeId}
-              previewHtml={previews[t.id]}
-              onUse={() => useTheme(t)}
-            />
-          ))}
-        </div>
+        {groups.map((g) => (
+          <section key={g.cat} className="mb-7">
+            <div className="mb-3 flex items-center gap-2.5 px-0.5">
+              <span className="text-[13px] font-bold tracking-wide text-[#0E1525]">{g.cat}</span>
+              <span className="ya-eyebrow">{g.themes.length} 套</span>
+              <span className="h-px flex-1 bg-black/8" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {g.themes.map((t) => (
+                <ThemeCard
+                  key={t.id}
+                  theme={t}
+                  active={t.id === themeId}
+                  previewHtml={previews[t.id]}
+                  onUse={() => useTheme(t)}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
         <p className="mt-6 text-center text-[12px] text-[#6B7793]">
           新模板在路上了——开源之后也欢迎贡献你自己的排版主题。
         </p>
