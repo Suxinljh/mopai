@@ -180,6 +180,16 @@ python -m git_filter_repo --force \
 它把个人邮箱、真实姓名、WSL 用户名与本机路径从全部历史里替换成占位符。
 新增敏感串时先加进这张表再重发布。
 
+**表格格式的坑（2026-10-07 踩过）**：格式是 `literal:原文==>替换文本`，
+git-filter-repo 按**最后一个** `==>` 切分，右边整串当作替换文本。右边**再写一次 `literal:` 是错的**——
+它会被原样写进文件。之前那么写，公开仓库里到处是 `<umbrella repo root>`，
+四个 `cf-*.sh` 更变成 `source $HOME/.config/codex/private.env`：文件找不到、
+`2>/dev/null` 把错误吞掉，脚本静默拿到空 token。`scripts/publish-scrub.py` 两种写法都兼容
+（会自动剥掉右边的 `literal:`），但表本身要保持干净。
+
+**验收重写结果时只扫 HEAD 的祖先**：`git rev-list --all` 会把你为了对比而 fetch 进来的
+备份 remote 也算进去，于是"没替换成功"的假象。用 `git rev-list HEAD`。
+
 **红线：全量重建会改写公开历史，只有在确认还没有外部 clone/fork 时才允许 force push。**
 一旦有了外部克隆者，停止重建，改为在公开仓库里直接接收提交（伞仓库退居归档），
 或从伞仓库 cherry-pick。

@@ -11,8 +11,12 @@ Usage:
     python app/scripts/publish-scrub.py <table> <patch-dir> [--incremental]
 
 The table is the umbrella root's `publish-scrub-expressions.txt` (it lives
-outside app/ on purpose, so it never reaches the public repository). Only
-`literal:FROM==>literal:TO` lines are supported.
+outside app/ on purpose, so it never reaches the public repository). Lines are
+`literal:FROM==>TO`, split on the **last** `==>`, exactly the way
+git-filter-repo does it; the right-hand side is the replacement text verbatim,
+so it must not carry a `literal:` prefix (one is tolerated and stripped, because
+an older version of the table had it and that prefix ended up written into the
+published files).
 
 `--incremental` skips every rule below a `# rebuild-only:` marker in the table.
 Those rules were added after the public history was cut, so the already-published
@@ -31,7 +35,7 @@ def load_rules(table_path, incremental):
     rebuild_only = False
     with io.open(table_path, encoding='utf-8') as fh:
         for line in fh:
-            line = line.rstrip('\n')
+            line = line.rstrip('\r\n')
             stripped = line.strip()
             if stripped.startswith('#'):
                 if stripped.startswith('# rebuild-only:'):
@@ -41,9 +45,13 @@ def load_rules(table_path, incremental):
                 continue
             if not line.startswith('literal:'):
                 raise SystemExit('unsupported expression (only literal: is handled): ' + line)
-            src, sep, dst = line[len('literal:'):].partition('==>literal:')
+            src, sep, dst = line[len('literal:'):].rpartition('==>')
             if not sep:
-                raise SystemExit('unsupported expression: ' + line)
+                raise SystemExit('expression has no ==> replacement: ' + line)
+            if dst.startswith('literal:'):
+                # Legacy table format. The prefix is not part of the replacement;
+                # keeping it writes "literal:" into the published files.
+                dst = dst[len('literal:'):]
             if incremental and rebuild_only:
                 print('  skip (rebuild-only): %s' % src[:40])
                 continue
