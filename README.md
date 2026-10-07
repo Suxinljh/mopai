@@ -83,7 +83,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板（src/lib/theme-ki
 | 站点 | cc-tokyo-01 `/opt/mopai/app`，Node 直跑 `dist/boot.js`，监听 127.0.0.1:3100 |
 | 进程 | `mopai.service`（systemd，内存上限 384M）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev` |
-| 门禁 | **站点公开**，谁都能打开用；`ACCESS_KEY` 只决定谁能用云端草稿箱。曾经的 Cloudflare Access 邮箱验证已撤（`scripts/cf-open-public.sh`），要关回去跑 `scripts/cf-create-access.sh` |
+| 门禁 | **站点公开**，谁都能打开用；`ACCESS_KEY` 只决定谁能用云端草稿箱。曾经的 Cloudflare Access 邮箱验证已于 2026-10-08 撤掉（当时借已登录的 dashboard 会话删的，因为本机 token 只读；`scripts/cf-open-public.sh` 是可复现路径），要关回去跑 `scripts/cf-create-access.sh` |
 | 图片 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite（Node 内置 `node:sqlite`），文件在 `/opt/mopai/app/data/mopai.db` |
 
