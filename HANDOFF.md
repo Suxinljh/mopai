@@ -122,7 +122,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 | 站点 | cc-tokyo-01 `/opt/mopai/app`，Node 直跑 `dist/boot.js`，监听 **127.0.0.1:3100** |
 | 进程 | `mopai.service`（systemd，内存上限 384M，实测吃 ~35MB）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev`，tunnel id `1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14`（ingress 在服务器 `/etc/cloudflared/mopai.yml`） |
-| 门禁 | Cloudflare Access 邮箱验证（只放行 `<ACCESS_ALLOW_EMAIL>`，168h 会话） |
+| 门禁 | Cloudflare Access 邮箱验证（只放行仓库所有者的邮箱，168h 会话；具体地址不进仓库） |
 | 图片公网读 | 独立 Access 应用放行 `wechat.yoru-and-akari.dev/api/img/*`（**微信抓图必须能匿名访问**，否则粘贴到公众号后图全丢）。换域名时这条必须同步改，Zero Trust → Access → Applications |
 | 图片存储 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite，`/opt/mopai/app/data/mopai.db` |

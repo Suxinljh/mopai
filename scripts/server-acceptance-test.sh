@@ -6,7 +6,7 @@ set -uo pipefail
 
 APP="http://127.0.0.1:3100"
 EMAILDOMAIN="yoru-and-akari.dev"
-ACCESS_EMAIL="<ACCESS_ALLOW_EMAIL>"
+ACCESS_EMAIL="${ACCESS_ALLOW_EMAIL:?set ACCESS_ALLOW_EMAIL to the Access allowlist email}"
 
 ACCESS_KEY=$(sudo grep '^ACCESS_KEY=' /opt/mopai/app/.env | cut -d= -f2-)
 echo "access key loaded (len=${#ACCESS_KEY})"

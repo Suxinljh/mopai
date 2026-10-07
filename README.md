@@ -1,18 +1,42 @@
-# 墨排 · WeChat MD Studio
+# 公众号排版助手 by Yoru
 
-公众号 Markdown 排版工具。左侧写 Markdown，右侧 375 / 677 实时预览，两百余套主题可按风格、复杂度、色系与来源筛选切换，一键复制富文本进公众号后台。
+把 Markdown 写成**可以直接粘进微信公众号后台**的排版。左侧写稿、右侧 375 / 677 实时预览、
+一键复制富文本；图片上传后走图床，正文里留下稳定绝对地址，微信粘贴时自行转存。
 
-线上地址：<https://mopai.yoru-and-akari.dev>
+线上实例：<https://wechat.yoru-and-akari.dev>
+
+## 它能做什么
+
+- **两百余套排版主题**：按风格（商务 / 政务 / 科技 / 杂志 / 中国风 / 暗色 …）、复杂度、色系、
+  来源项目筛选；所有主题渲染同一份样例，视觉差异直接可比。每套主题都标注原项目、原作者、
+  许可证与 lineage，点「来源」可查完整署名。
+- **为公众号而生的 Markdown 方言**：关键词下划线、带序号的章节标题、金句卡片、引文框、
+  居中强调句、多图轮播、署名块、GFM 表格，全部映射成全内联样式的 `<section>` 结构。
+- **轮播画幅真裁切**：同一轮播里的图在上传前就在浏览器里裁成统一比例（4:3 / 3:4 / 16:9 /
+  9:16 / 1:1），不靠 `object-fit` 或固定高度伪造——公众号会丢掉那些写法。
+- **稿件双写**：浏览器 localStorage 每次改动防丢；云端数据库跨设备可见，「保存到草稿箱」
+  才进归档。草稿箱支持搜索、续写、复制 Markdown、删除。
+- **素材库**：存储用量、没在用的旧图批量清理、最近 200 张图在用状态一览。
+
+## 快速开始
+
+```bash
+npm ci
+cp .env.example .env      # 填好「环境变量」一节的六项
+npm run dev               # 本地开发
+npm run build && npm start  # 生产模式
+```
 
 ## 核心设计
 
 语义与视觉分离，这条线不能破：
 
 ```
-Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板（src/lib/themes.ts）→ 全内联样式 HTML
+Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板（src/lib/theme-kit.ts）→ 全内联样式 HTML
 ```
 
-新增一套主题 = 在 `src/lib/themes.ts` 加一个 `Theme` 对象，解析层和已有稿件零改动。
+主题库由 `scripts/themes/import.ts` 从多个开源项目聚合生成（`src/lib/themes-imported/`），
+来源、授权与移植损耗的完整审计见 [`THEME-SOURCES.md`](./THEME-SOURCES.md)。
 
 ## 公众号专用语法
 
@@ -57,7 +81,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板（src/lib/themes.t
 | 站点 | cc-tokyo-01 `/opt/mopai/app`，Node 直跑 `dist/boot.js`，监听 127.0.0.1:3100 |
 | 进程 | `mopai.service`（systemd，内存上限 384M）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `mopai.yoru-and-akari.dev` |
-| 门禁 | Cloudflare Access 邮箱验证码，策略只放行 `<ACCESS_ALLOW_EMAIL>`；`/api/img/*` 走 bypass 应用，公网可读（微信抓图需要） |
+| 门禁 | Cloudflare Access 邮箱验证码，策略只放行仓库所有者的邮箱（地址不进仓库）；`/api/img/*` 走 bypass 应用，公网可读（微信抓图需要） |
 | 图片 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite（Node 内置 `node:sqlite`），文件在 `/opt/mopai/app/data/mopai.db` |
 

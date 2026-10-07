@@ -4,6 +4,5 @@
 export const APP_NAME = '公众号排版助手'
 export const APP_BYLINE = 'by Yoru'
 
-// 开源之后把仓库地址填到这里（例如 'https://github.com/yourname/wechat-md'）。
-// 留空时顶栏不显示 GitHub 入口。
-export const REPO_URL = ''
+// 公开仓库地址；顶栏的 GitHub 入口在它非空时出现。
+export const REPO_URL = 'https://github.com/yoruuuchan/wechat-md-studio'

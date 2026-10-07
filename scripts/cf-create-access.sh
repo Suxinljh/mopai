@@ -11,7 +11,7 @@ ACC=5e96dfd2bf22d385e4ffdaa794d74676
 AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
 APP_NAME="墨排 Mopai"
 APP_DOMAIN="wechat.yoru-and-akari.dev"
-ALLOW_EMAIL="<ACCESS_ALLOW_EMAIL>"
+ALLOW_EMAIL="${ACCESS_ALLOW_EMAIL:?set ACCESS_ALLOW_EMAIL to the Access allowlist email}"
 IDP_ID="02dc55ac-e7e2-4623-b699-ff8bdcb4f825"
 SESSION="168h"
 
