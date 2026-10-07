@@ -1,6 +1,6 @@
 # 墨排 · WeChat MD Studio
 
-公众号 Markdown 排版工具。左侧写 Markdown，右侧 375 / 677 实时预览，三套主题一键切换，一键复制富文本进公众号后台。
+公众号 Markdown 排版工具。左侧写 Markdown，右侧 375 / 677 实时预览，两百余套主题可按风格、复杂度、色系与来源筛选切换，一键复制富文本进公众号后台。
 
 线上地址：<https://mopai.yoru-and-akari.dev>
 
@@ -131,10 +131,10 @@ npm run dev               # Vite + Hono 同端口 3000
 npm run check             # tsc -b，零错误
 npm run build             # 产出 dist/boot.js（自包含）+ dist/public/
 npm start                 # 生产模式跑 dist/boot.js
-npm run verify:themes     # 三套主题渲染 + 公众号红线校验
+npm run verify:themes     # 全部主题渲染 + 公众号红线 + catalog 完整性/许可证校验
 ```
 
-`npm run verify:themes` 会把三套主题的干净正文与预览页写到 `verify-out/`，可直接用浏览器打开检查排版。
+`npm run verify:themes` 会把每套主题的干净正文与预览页写到 `verify-out/`，可直接用浏览器打开检查排版；同时校验 catalog 里每套主题的来源档案齐全、许可证文件真实存在。
 
 ## 部署
 
@@ -184,3 +184,20 @@ PowerShell 管道会把末尾换行转成 CRLF，bash 会在最后一行报 `$'\
 - `img:<key>` 协议形状不变
 
 golden 主题的每个组件样式与示范稿 `公众号排版示范稿_GoldenSample_修正版.html` 逐段一致（该文件如另有提供，以提供版本为准）。
+
+## 许可证与第三方主题署名
+
+本仓库以 **AGPL-3.0-or-later** 授权，正文见根目录 `LICENSE`。线上服务按 AGPL 第 13 条
+向使用者提供完整对应源码：仓库公开、部署分支可对应到公开提交即满足；在仓库公开之前
+部署含 copyleft 主题的构建，属于尚未履行该义务的状态。
+
+主题库聚合了多个开源项目，共 219 套。每套主题在模板库卡片上点「来源」可看到原项目、
+原作者、许可证、lineage 与移植改动；上游许可证原文留存在 `app/licenses/`；完整来源审计、
+未接入清单与移植中的有损转换见 [`THEME-SOURCES.md`](./THEME-SOURCES.md)。
+
+按上游许可证分组：MIT 207 · AGPL-3.0-or-later 6 · GPL-3.0-only 2 · Apache-2.0 1 · 本项目自研 3。
+
+- 6 套 gzh-design-skill 主题（AGPL-3.0-or-later）与 2 套 mdnice 派生主题（GPL-3.0-only）
+  是本仓库选择 AGPL 的直接原因：前者有传染性且第 13 条覆盖网络服务，后者依
+  AGPL 第 13 条第二段允许与 AGPL 作品组合。
+- MIT / Apache-2.0 / WTFPL 来源可单向并入 AGPL 项目，各自的版权声明与许可文本已按要求保留。

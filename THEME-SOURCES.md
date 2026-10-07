@@ -89,21 +89,33 @@ license 字段（实测），上游主题文件已浅克隆核对；标注「推
 5. **`var()` / `calc()` 在导入期求值**；求不出的声明整条丢弃（`scripts/themes/lib/css.ts`）。
 6. md-wechat 的 `hrHtml` / `h2WrapOpen` 等 **HTML 片段不进样式槽**（带尖括号的值在 mapStyles 里被丢弃）。
 
-## 四、待你拍板的一件事：应用整体许可证
+## 四、应用整体许可证：已定为 AGPL-3.0-or-later（2026-10-07 拍板）
 
-现有 6 套 gzh-design-skill 主题（AGPL-3.0-or-later）与 2 套 mdnice 派生主题（GPL-3.0-only）
-使整个应用实质处于 copyleft 约束下：AGPL 第 13 条覆盖网络服务，而本应用已部署为线上服务。
-两条路都走得通，且**切换是机械操作**——catalog 里每套主题都带 `meta.origin.license`，
-按许可证过滤即可整批增删：
+仓库根目录 `LICENSE` 为 AGPL-3.0 正文，`app/package.json` 的 `license` 字段与
+`app/README.md` 的署名章节同步声明。219 套主题全部保留，兼容性逐族核对：
 
-- **整体采用 AGPL-3.0**：219 套全保留；需向线上用户提供完整源码（项目本就计划开源）。
-  MIT / Apache-2.0 来源可单向并入，GPL-3.0 与 AGPL-3.0 互兼容。
-- **整体采用 MIT**：移除上述 8 套（6 AGPL + 2 GPL），保留 208 套；gzh 那 6 套若想要回，
-  需 clean-room 重造或按 gzh-design-skill README 的邀请联系甲木谈单独授权。
+| 上游许可证 | 套数 | 与 AGPL-3.0 应用的关系 |
+|---|---|---|
+| MIT | 207 | 单向并入，保留版权声明与许可文本即可（已做） |
+| AGPL-3.0-or-later（gzh-design-skill） | 6 | 同许可证族，保留联名署名（已做） |
+| GPL-3.0-only（mdnice 派生 2 套） | 2 | AGPL 第 13 条第二段明文允许与 GPL-3.0 作品组合为单一 AGPL 作品 |
+| Apache-2.0（wenyan-core） | 1 | 兼容；保留 LICENSE、标注修改、传递 NOTICE（上游无 NOTICE，此条免） |
+| 本项目自研 | 3 | — |
 
-补充事实：你已经是 gzh-design-skill 的上游贡献者（其最新提交合并了
-`yoruuuchan/fix/wechat-copy-serialization`），且其 README 明文欢迎产品方共创——
-单独授权这条路有现成的接触点。
+由此产生的义务，按可执行性排序：
+
+1. **源码提供**：AGPL 第 13 条要求线上服务向使用者提供完整对应源码。仓库公开、且部署
+   构建能对应到公开提交即满足。**在仓库公开之前部署含 copyleft 主题的构建，义务尚未履行**——
+   开源发布应早于或同步于下一次部署，别先部署后开源。
+2. **署名保留**：各来源的版权声明、许可文本与 lineage 已在 `app/licenses/` 与每套主题的
+   `meta.origin` 中保留；`npm run verify:themes` 会校验许可证文件真实存在，删主题时
+   别留下悬空的 licenseFile 引用。
+3. **衍生同许可证**：后续新增主题或改动渲染层，产物仍属 AGPL-3.0-or-later；再引入
+   更严或不相容的来源（BSL、附加禁商用条款等）前，先回本文件第二节核对。
+
+若未来想改回宽松许可证：按 `meta.origin.license` 过滤移除 8 套 copyleft 主题即可，
+其余 208 套不受影响；gzh 那 6 套想要回，走 clean-room 重造，或按上游 README 的共创邀请
+联系甲木谈单独授权（你已是该仓库上游贡献者，PR #19 已合并，接触点是现成的）。
 
 ## 五、重跑导入
 

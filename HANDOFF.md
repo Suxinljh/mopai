@@ -218,6 +218,11 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
 ### 产品方向（用户明确拍板的）
 
 - **准备开源**：功能完善后开源，GitHub 仓库地址定了之后填进 `src/lib/brand.ts` 的 `REPO_URL`（顶栏 GitHub 图标自动出现）。
+- **许可证已定（2026-10-07）**：仓库整体 **AGPL-3.0-or-later**。三处声明：根目录 `LICENSE`、
+  `app/package.json` 的 `license` 字段、`app/README.md` 的「许可证与第三方主题署名」章节。
+  选它是因为主题库含 6 套 AGPL 与 2 套 GPL-3.0 主题（兼容性逐族核对见 `THEME-SOURCES.md` 第四节）。
+  操作红线：**开源发布不得晚于部署**——AGPL 第 13 条覆盖线上服务，仓库没公开之前
+  部署含 copyleft 主题的构建就是未履行源码提供义务。
 - **多人登录 / 收费**：远期方向，**先不做**。现在只记录意向：等功能完善、开源之后，再考虑多用户与付费模式。届时现在的「单口令 + 单用户空间」要拆成真实账号体系，这是大工程，别提前埋半吊子抽象。
 
 按价值排序：
