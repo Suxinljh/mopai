@@ -8,6 +8,16 @@ APP="http://127.0.0.1:3100"
 
 ACCESS_KEY=$(sudo grep '^ACCESS_KEY=' /opt/mopai/app/.env | cut -d= -f2-)
 echo "access key loaded (len=${#ACCESS_KEY})"
+if [ -z "$ACCESS_KEY" ]; then
+  echo "FATAL: ACCESS_KEY is empty — run this as a user that can sudo, or every"
+  echo "       owner-path check below silently degrades into an anonymous one."
+  exit 1
+fi
+
+FAILURES=0
+verdict() {  # verdict LABEL OK
+  if [ "$2" = "1" ]; then echo "  [PASS] $1"; else echo "  [FAIL] $1"; FAILURES=$((FAILURES + 1)); fi
+}
 
 echo
 echo "### 1. app reachable, SPA fallback"
@@ -45,24 +55,39 @@ UP=$(curl -4 -sS -m 30 -b "$COOKIE_JAR" -X POST -H 'Content-Type: application/js
 echo "  $UP"
 KEY=$(printf '%s' "$UP" | python3 -c 'import sys,json,re; m=re.search(r"\"key\":\"([^\"]+)\"", sys.stdin.read()); print(m.group(1) if m else "")')
 echo "  key = $KEY"
+# Anonymous uploads succeed too now, so an empty ACCESS_KEY would no longer fail
+# here — it would quietly upload as a visitor. The key carries the owner id, so
+# assert on it or a broken login passes as a working deploy.
+if printf '%s' "$KEY" | grep -q -- '-mopai-1-'; then
+  echo "  [PASS] uploaded as the owner"
+else
+  echo "  [FAIL] not an owner key (login probably failed, ACCESS_KEY empty?)"
+  FAILURES=$((FAILURES + 1))
+fi
 
 echo
 echo "### 7. storage.list shows the row"
-curl -4 -sS -m 10 -b "$COOKIE_JAR" "$APP/api/trpc/storage.list" | head -c 400; echo
+LIST=$(curl -4 -sS -m 10 -b "$COOKIE_JAR" "$APP/api/trpc/storage.list")
+echo "  $(printf '%s' "$LIST" | head -c 400)"
+if printf '%s' "$LIST" | grep -q 'acceptance.png'; then
+  echo "  [PASS] the owner sees their own upload"
+else
+  echo "  [FAIL] the upload is missing from the owner's list"
+  FAILURES=$((FAILURES + 1))
+fi
 
 echo
 echo "### 8. /api/img/<key> redirects, target returns 200"
 if [ -n "$KEY" ]; then
   LOC=$(curl -4 -sS -m 15 -o /dev/null -w '%{redirect_url}' "$APP/api/img/$KEY")
   echo "  302 -> $LOC"
-  echo "  final: $(curl -4 -sS -m 20 -o /dev/null -w 'status=%{http_code} type=%{content_type} bytes=%{size_download}' "$LOC")"
-  echo "$KEY" > /tmp/mopai-test-key
+  FINAL=$(curl -4 -sS -m 20 -o /dev/null -w 'status=%{http_code} type=%{content_type} bytes=%{size_download}' "$LOC")
+  echo "  final: $FINAL"
+  case "$FINAL" in
+    status=200\ type=image/png*) echo "  [PASS] publicly readable as an image" ;;
+    *) echo "  [FAIL] unexpected final response"; FAILURES=$((FAILURES + 1)) ;;
+  esac
 fi
-
-FAILURES=0
-verdict() {  # verdict LABEL OK
-  if [ "$2" = "1" ]; then echo "  [PASS] $1"; else echo "  [FAIL] $1"; FAILURES=$((FAILURES + 1)); fi
-}
 
 echo
 echo "### 9. upload without a session now works (the gate is gone)"
