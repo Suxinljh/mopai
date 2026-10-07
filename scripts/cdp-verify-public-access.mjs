@@ -165,8 +165,10 @@ const docName = await evaluate(`document.body.innerText.match(/示例稿[^\\n]*/
 check('the seeded draft is the neutral sample', docName.includes('示例稿'), JSON.stringify(docName))
 
 const source = await evaluate(`window.__mopaiCodemirror.state.doc.toString()`)
-const companyLeaks = ['<SAMPLE_COMPANY>', '<SAMPLE_COMPANY>', 'OPC'].filter((s) => source.includes(s))
-check('no company copy in the default draft', companyLeaks.length === 0, companyLeaks.join(','))
+// Assert on the neutral sample's own marker rather than blacklisting strings
+// that must not appear: a blacklist has to name them, which is exactly what
+// this check exists to keep out of the public repository.
+check('the default draft is the neutral welcome sample', source.includes('欢迎使用公众号排版助手'), source.slice(0, 60))
 for (const needle of ['==', ':::center', ':::quote', ':::carousel', '@signature', '|:---', '```', '<!--']) {
   check(`sample demonstrates ${needle}`, source.includes(needle))
 }

@@ -184,6 +184,24 @@ python -m git_filter_repo --force \
 一旦有了外部克隆者，停止重建，改为在公开仓库里直接接收提交（伞仓库退居归档），
 或从伞仓库 cherry-pick。
 
+#### 增量发布（2026-10-07 起用的就是这条，不重写历史）
+
+```bash
+# 在伞仓库里：<base> = 公开仓库当前镜像到的那个伞提交
+git format-patch --binary <base>..master -- app/     # -o 只能写仓库内；落在根目录后移走
+python _publish/scrub.py <伞根>/publish-scrub-expressions.txt <补丁目录>
+# 在公开克隆里
+git am -p2 <补丁目录>/0*.patch                        # -p2 剥掉 a/app/ 前缀
+git push origin master                                # 普通推送，不是 force
+```
+
+**坑：增量时要把表里 2026-10-07 新增的那两条公司名规则（表格末尾带注释的那组）去掉再 scrub。**
+公开历史的基线是用旧表跑出来的，那两处仍是原文；补丁的上下文行一旦被替换成占位符，
+`git am` 就报 `patch does not apply`。这两条只对**全量重建**有意义（重建时整条历史一起换）。
+同一条教训的另一面：**新写进公开文件的文本不要再出现这些串**，否则每次增量都得特殊处理——
+`scripts/cdp-verify-public-access.mjs` 里原本用黑名单校验脱敏，被 scrub 改成两个相同占位符后
+静默失效，现已改成正向断言示例稿自己的标题。
+
 ### ⚠️ 往服务器推脚本的坑
 
 **不要用 PowerShell 管道推脚本**——它会把末尾换行变成 CRLF，bash 会在最后一行报 `$'\r': command not found`。
@@ -232,7 +250,7 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
 5. **tRPC 的错误是 HTTP 200 + error 信封**，`curl | head -c` 会吞掉信号。测试脚本要显式检查有没有 `result` 信封、有没有 `NaN`。
 6. **会话 cookie 是 `Secure`**，本地/服务器上用纯 HTTP 测试时 curl 的 cookie jar 会静默丢弃它——改成手工捕获 `set-cookie` 头回放。
 7. **round2 验收脚本**断言的是"增量"而不是绝对值（别的脚本会留下自己的测试图），并且预清理只删**它自己生成的文件名**。别改成"把现有的都删掉"——前一轮就是这样误删了用户的真实上传。
-8. **默认示例稿已脱敏**（2026-10-07）：`src/lib/sample.ts` 的 `SAMPLE_DOC` 以前是站长公司的宣传稿，随公开仓库外泄过，现已换成中性的「示例稿 · 语法速览」（覆盖全部语法，同时是 golden 主题的验收样例）。**服务器数据库里还留着旧的那一行**（`<SAMPLE_COMPANY>生态稿 · 示例`，`ownerId=1`、`savedAt` 为 null），那是站长私有数据、登录后才读得到；别在诊断时对它跑无差别 DELETE。
+8. **默认示例稿已脱敏**（2026-10-07）：`src/lib/sample.ts` 的 `SAMPLE_DOC` 以前是站长公司的宣传稿，随公开仓库外泄过，现已换成中性的「示例稿 · 语法速览」（覆盖全部语法，同时是 golden 主题的验收样例）。**服务器数据库里还留着改名前的那一行默认稿**（`ownerId=1`、`savedAt` 为 null），那是站长私有数据、登录后才读得到；别在诊断时对它跑无差别 DELETE。旧文本仍存在于公开仓库的历史提交里——工作树已经干净，要连历史一起清掉只能走全量重建（见「公开仓库与发布流水线」）。
 9. **给 `files` 加列必须加在最后**。drizzle 的 `sqlite-proxy` 驱动按**位置**映射行，而 `ALTER TABLE ... ADD COLUMN` 只会追加到末尾；`db/schema.ts` 里声明的顺序一旦和物理顺序不一致，读出来的字段会整体错位，而且**不报错**。`api/queries/files-upgrade.test.ts` 就是钉这件事的。同理，`CREATE INDEX` 引用新列必须放在 `ALTER` 之后——旧库上 `CREATE TABLE IF NOT EXISTS` 是 no-op，先建索引会直接 `no such column`。
 10. **改 Cloudflare 之前先确认 token 能写**。只读 token 的写操作回 `HTTP 405 / 10405`，不是「权限不足」那种一眼能认的错。免费额度已经用满（见部署形态表），加规则前先 `bash scripts/cf-open-public.sh --check` 看清 zone 上已有什么。
 11. **脚本里调 tRPC：查询用 GET，变更用 POST**。用 POST 打查询会得到 `Unsupported POST-request to query procedure`，而 HTTP 状态还是 200，很容易误判成"接口坏了"。
