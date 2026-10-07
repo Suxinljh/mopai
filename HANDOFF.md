@@ -159,7 +159,7 @@ ssh cc-tokyo-01 'bash /tmp/install.sh'
 # 在伞仓库里
 SP=$(git rev-parse 767661c^2)
 git format-patch --binary 767661c..HEAD -- app/   # 补丁会落在仓库根，记得移走
-# 在构建目录里（<local tmp>/public-repo-build 是现成的克隆）
+# 在构建目录里（<local workspace>/Projects/wechat-md-studio 是现成的克隆，remote 已指向公开仓库）
 git init && git fetch <伞仓库路径> $SP && git reset --hard FETCH_HEAD
 git am -p2 <那些补丁>                              # -p2 剥掉 a/app/ 前缀
 git rev-parse HEAD^{tree}                          # 必须等于伞仓库的 git rev-parse HEAD:app
