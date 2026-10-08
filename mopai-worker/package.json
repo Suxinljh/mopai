@@ -3,11 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "check": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261001.1",
+    "typescript": "~5.9.3",
     "wrangler": "^4.42.0"
   }
 }

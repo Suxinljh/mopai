@@ -1,0 +1,76 @@
+# 推送 mopai-worker/ 下的改动时，自动把图床 Worker 部署到 Cloudflare。
+#
+# 需要一个仓库 Secret（GitHub → Settings → Secrets and variables → Actions → New repository secret）：
+#   CLOUDFLARE_API_TOKEN   Cloudflare API Token，最小权限是
+#                            Account → Workers Scripts   → Edit
+#                            Account → Account Settings  → Read
+#                          因为 wrangler.toml 里声明了自定义域（wechat.ljhsu.xin），
+#                          如果 deploy 报权限错，再补这两条：
+#                            Zone → Workers Routes → Edit
+#                            Zone → Zone           → Read
+#                          作用范围记得收紧：账户限定到持有 design 桶的那个，区域限定到 ljhsu.xin。
+#
+# 账户 ID（account_id）和自定义域都写在 mopai-worker/wrangler.toml 里 —— 它们不是密钥
+# （account_id 会出现在每个 dashboard URL 里），所以这里不需要 CLOUDFLARE_ACCOUNT_ID。
+#
+# Worker 的运行时密钥 IMG_ADMIN_KEY 不在这里管：用 `npx wrangler secret put IMG_ADMIN_KEY`
+# 设过之后它一直留在 Cloudflare 侧，重新部署脚本既不会覆盖、也不会清掉它。
+
+name: worker
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'mopai-worker/**'
+      - '.github/workflows/worker.yml'
+  # 手动触发会忽略上面的 paths 过滤，且会部署所选分支 —— 从功能分支点它等于直接发线上。
+  workflow_dispatch:
+
+# 部署是发布动作：宁可排队等，也别把跑到一半的部署掐掉，那可能留下半截状态。
+concurrency:
+  group: worker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mopai-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mopai-worker/package-lock.json
+
+      - run: npm ci
+
+      # 没配 Secret 时给人话报错，而不是让 wrangler 抛一句看不懂的认证失败。
+      - name: 检查 CLOUDFLARE_API_TOKEN 已配置
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::仓库缺少 Secret CLOUDFLARE_API_TOKEN —— 去 Settings → Secrets and variables → Actions 添加"
+            exit 1
+          fi
+
+      # mopai-worker/tsconfig.json 是 strict 的；这个闸门保证类型/语法问题不会推上线。
+      - run: npm run check
+
+      # 先只打包、不发布：确认 bundle 能打出来，且 wrangler.toml 里的
+      # R2 绑定（BUCKET → design）、KEY_PREFIX、自定义域都读得到。
+      - name: 打包预检（Dry run）
+        run: npx wrangler deploy --dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: 部署到 Cloudflare
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
