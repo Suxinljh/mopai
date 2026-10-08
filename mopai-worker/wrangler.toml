@@ -1,17 +1,44 @@
+# 墨排图床 — R2 image host, deployed to wechat.ljhsu.xin
+#
+# Deploy:
+#   npx wrangler login                  # or export CLOUDFLARE_API_TOKEN
+#   npx wrangler deploy
+#   npx wrangler secret put IMG_ADMIN_KEY   # same value as the app's IMG_ADMIN_KEY
+#
+# The R2 bucket is reached only through this binding, so no S3 credentials exist
+# anywhere in the deployment.
+
 name = "mopai-images"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 workers_dev = true
 
-# The R2 bucket is reached only through this binding, so no S3 credentials exist
-# anywhere in the deployment.
+# The account that owns the `design` bucket. Required by wrangler whenever a
+# memberships lookup is ambiguous or the token is a scoped API token — it is not
+# a secret (it appears in every dashboard URL), but it is deployment-specific.
+account_id = "b3a462d2950529b836533c153e1bf3fa"
+
+# Reuses the existing `design` bucket rather than creating a dedicated one, so
+# these images share its free-tier allowance. The Worker never sees the bucket
+# name; only the binding does.
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "mopai-assets"
+bucket_name = "design"
+
+# Namespace the app's objects inside the shared bucket. R2 has no real folders —
+# this is an object-key prefix, applied by the Worker so that the app's flat
+# generated keys (api/lib/storage.ts) land under wechat/.
+#
+# Keep the main app unaware of it: the prefix is added on write and stripped
+# from what is written to the app's database, so `files.key`, the public
+# /img/<key> URL and the app's delete call all stay unprefixed. Changing this
+# value later orphans every object already stored under the old prefix.
+[vars]
+KEY_PREFIX = "wechat/"
 
 # Custom domain rather than a workers.dev route: it matches the public URL the
 # app bakes into copied HTML, and it leaves /img/* outside the site's
 # Cloudflare Access policy.
 [[routes]]
-pattern = "mopai-img.yoru-and-akari.dev"
+pattern = "wechat.ljhsu.xin"
 custom_domain = true

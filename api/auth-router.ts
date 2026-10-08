@@ -25,7 +25,7 @@ export const authRouter = createRouter({
         return { success: false as const, message: '口令不对' }
       }
       const token = await signSessionToken({ uid: 1 })
-      const opts = getSessionCookieOptions(ctx.req.headers)
+      const opts = getSessionCookieOptions(ctx.req.headers, ctx.req.url)
       ctx.resHeaders.append(
         'set-cookie',
         cookie.serialize(Session.cookieName, token, {
@@ -40,7 +40,7 @@ export const authRouter = createRouter({
     }),
 
   logout: publicQuery.mutation(({ ctx }) => {
-    const opts = getSessionCookieOptions(ctx.req.headers)
+    const opts = getSessionCookieOptions(ctx.req.headers, ctx.req.url)
     ctx.resHeaders.append(
       'set-cookie',
       cookie.serialize(Session.cookieName, '', {

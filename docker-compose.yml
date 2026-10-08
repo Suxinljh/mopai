@@ -1,0 +1,146 @@
+# 墨排 / wechat-md-studio — Docker deployment.
+#
+#   cp .env.example .env    # then fill in the values
+#   docker compose pull     # fetch the published image
+#   docker compose up -d    # starts the site on the host's :3100
+#
+# Two services. `app` is the Node site plus the SQLite file in a named volume;
+# `cloudflared` dials out to Cloudflare and publishes it.
+#
+# The image is published to Docker Hub, so a deployment host (a NAS) needs no
+# source tree — only this file and .env. `pull` is a separate step on purpose:
+# compose only re-pulls when asked, so `up -d` alone would quietly restart the
+# stale local `latest` and look like the update did nothing.
+#
+# There is deliberately no `build:` block — this file is a *runtime* descriptor,
+# and a `build:` block only turns the Docker UI's build button into a
+# permanently failing one. Build and publish where the source is at hand, or
+# carry a saved image where the registry is unreachable:
+#
+#   docker build -t suxinljh/mopai:latest . && docker push suxinljh/mopai:latest
+#   docker save suxinljh/mopai:latest | gzip > mopai-image.tar.gz  # build machine
+#   gunzip -c mopai-image.tar.gz | docker load                     # host
+#
+# `cloudflared` lives behind the `tunnel` profile, so a plain `up` starts only the
+# app — nothing needs secrets/tunnel-token until a hostname has been chosen. To
+# bring the tunnel up as well:
+#
+#   docker compose --profile tunnel up -d
+#
+# (A `COMPOSE_PROFILES=tunnel` line in .env works too, but compose's own settings
+# share that file with `env_file:` below, so the key would also land in the app
+# container's environment. Prefer the flag.)
+
+services:
+  app:
+    # Published image. Update with `docker compose pull && docker compose up -d`;
+    # pin a dated tag (suxinljh/mopai:2026-10-08 is published alongside) instead
+    # of `latest` if you would rather make each update an explicit decision.
+    #
+    # This was a local-only tag guarded by `pull_policy: never` while there was
+    # no registry to pull from — compose would otherwise spend a registry
+    # timeout before reporting "image not loaded yet", which is slow and
+    # confusing on a mainland connection. Now the tag exists upstream, so the
+    # default policy is the right one: pull it when it is missing.
+    image: suxinljh/mopai:latest
+    container_name: mopai-app
+    restart: unless-stopped
+
+    # The app reads its config from process.env, so variables are injected as
+    # real environment variables rather than a mounted .env file — that keeps the
+    # secrets out of the image and out of the container filesystem.
+    #
+    # env_file passes every key in .env through, which is intended: this is how a
+    # variable added to .env by an upstream update reaches the app without also
+    # having to be listed below. It is only safe because the tunnel token is NOT
+    # in .env — it lives in secrets/tunnel-token and goes to cloudflared alone.
+    # Adding it to .env would hand the internet-facing container the ability to
+    # stand up its own tunnel into this host's network.
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      # Overrides the loopback default. Inside a container 127.0.0.1 is the
+      # container itself, so cloudflared could not reach it.
+      HOST: 0.0.0.0
+      PORT: 3100
+      DATABASE_URL: file:./data/mopai.db
+
+    volumes:
+      # Only the database needs to survive a rebuild. Uploaded images live in R2,
+      # behind the image worker, never here.
+      - mopai-data:/app/data
+
+    # Publishes the site on the host, so it is reachable at http://<host>:3100
+    # from the LAN. This is deliberate — the NAS has to be reachable *before* a
+    # tunnel and a hostname exist — but it is also the only thing here that is
+    # not tunnelled, so it is the one line to revisit once the site is live:
+    # narrow it to "127.0.0.1:3100:3100" (host-local only, still handy for
+    # debugging) or delete the mapping so the tunnel is the only way in.
+    #
+    # The app is still behind its ACCESS_KEY session, so this is exposure of the
+    # login page and the editor, not of the database.
+    ports:
+      - "3100:3100"
+
+    # Runs on a J4005 in ~35 MB measured; the cap is headroom, not a target.
+    mem_limit: 384m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+    networks:
+      - mopai
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: mopai-cloudflared
+    restart: unless-stopped
+
+    # Off by default so `docker compose up -d` works with no tunnel configured.
+    # See the header comment for how to enable it.
+    profiles:
+      - tunnel
+
+    # Remotely-managed tunnel: hostname -> service is configured in the
+    # Cloudflare dashboard (Zero Trust -> Networks -> Tunnels -> Public
+    # hostnames), pointing at http://app:3100. The token already carries the
+    # tunnel id and secret.
+    command: tunnel --no-autoupdate run
+
+    environment:
+      # Read from a mounted file rather than a variable, so the token appears in
+      # neither `docker inspect` nor the process list, and so it is never part of
+      # the app container's environment. cloudflared fails loudly if the file is
+      # missing or unreadable, so this cannot start half-configured.
+      TUNNEL_TOKEN_FILE: /run/secrets/tunnel-token
+
+    secrets:
+      - tunnel-token
+
+    depends_on:
+      app:
+        # service_healthy, not service_started: the tunnel must not accept
+        # traffic before the app answers its healthcheck.
+        condition: service_healthy
+
+    networks:
+      - mopai
+
+networks:
+  mopai:
+    driver: bridge
+
+volumes:
+  mopai-data:
+
+secrets:
+  tunnel-token:
+    # Only read when the `tunnel` profile is enabled, so this file does not have
+    # to exist yet. Once it is needed, create it before `up`: Docker refuses to
+    # mount a missing bind source instead of silently starting a tunnel-less
+    # stack. Gitignored.
+    file: ./secrets/tunnel-token

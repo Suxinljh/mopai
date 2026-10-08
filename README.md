@@ -94,24 +94,30 @@ MathJax 默认的红色错误盒子（那个盒子带 `data-mjx-error` 和一个
 
 ```
 上传（编辑器拖拽 / 右侧素材清单按钮）
-  → tRPC storage.upload → mopai-images Worker → R2 桶 mopai-assets
+  → tRPC storage.upload → mopai-images Worker → R2 桶
   → Markdown 回填 img:<key>
-渲染时 resolveImg 把 img:<key> 展开为 https://wechat.yoru-and-akari.dev/api/img/<key>
-  → 站点 302 → https://mopai-img.yoru-and-akari.dev/img/<key>（R2 真图）
+渲染时 resolveImg 把 img:<key> 展开为 https://<站点域名>/api/img/<key>
+  → 站点 302 → https://<IMG_BASE_URL>/img/<key>（R2 真图）
 ```
 
 复制/导出的 HTML 里是**稳定绝对地址**，微信粘贴时自行转存。key 永不过期，所以这个地址可以一直用。
 
+`wechat/` 之类的前缀**只是 R2 里的对象键前缀**（`mopai-worker/wrangler.toml` 的 `KEY_PREFIX`），由 Worker 自己加、自己剥，**不出现在 key、URL 或数据库里**——否则删除回传时会变成 `wechat/wechat/xxx`。详见 `mopai-worker/src/index.ts` 的 `objectKey()`。
+
 ## 部署形态
+
+> **本 fork 改用 Docker 部署**（`Dockerfile` + `docker-compose.yml`），步骤见下面的[「部署」](#部署)一节。
+> 下表描述的是**上游原作者的 VPS 方案**，保留作为设计背景；它依赖的那批引导脚本
+> （`scripts/cf-*.sh`、`scripts/server-*.sh`、`scripts/stage-to-tokyo.sh`）已从本仓库移除。
 
 | 部件 | 位置 |
 |---|---|
 | 站点 | cc-tokyo-01 `/opt/mopai/app`，Node 直跑 `dist/boot.js`，监听 127.0.0.1:3100 |
 | 进程 | `mopai.service`（systemd，内存上限 384M）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev` |
-| 门禁 | **站点公开**，谁都能打开用；`ACCESS_KEY` 只决定谁能用云端草稿箱。曾经的 Cloudflare Access 邮箱验证已于 2026-10-08 撤掉（当时借已登录的 dashboard 会话删的，因为本机 token 只读；`scripts/cf-open-public.sh` 是可复现路径），要关回去跑 `scripts/cf-create-access.sh` |
-| 图片公网读 | `/api/img/*` **必须能匿名访问**，微信重新托管图片时要抓得到，否则粘贴进公众号后图全丢。站点公开时天然满足；若将来加上 Access，要同时给它建一个 bypass 应用，且绝不能连带放行 `/api/trpc/*` |
-| 图片 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
+| 门禁 | **站点公开**，谁都能打开用；`ACCESS_KEY` 只决定谁能用云端草稿箱。曾经的 Cloudflare Access 邮箱验证已于 2026-10-08 撤掉 |
+| 图片公网读 | `/api/img/*` **必须能匿名访问**，微信重新托管图片时要抓得到，否则粘贴进公众号后图全丢。站点公开时天然满足；若将来加上 Access，要同时给它建一个 bypass 应用，且绝不能连带放行 `/api/trpc/*`（那里有 `auth.login`） |
+| 图片 | Worker `mopai-images` → R2 桶；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite（Node 内置 `node:sqlite`），文件在 `/opt/mopai/app/data/mopai.db` |
 
 ### 公开之后靠什么挡滥用
@@ -134,16 +140,7 @@ MathJax 默认的红色错误盒子（那个盒子带 `data-mjx-error` 和一个
 - **不占 Cloudflare 速率限制规则**。免费计划每个 zone 只有 1 条，已经被同 zone 的另一个项目用掉了；上传的防洪改由上面的应用层承担。
 - **Turnstile 先不接**。它免费且不限量，是下一层该加的东西，但验证失败会让大陆访客彻底传不了图，所以等到配额被证明太松再加。
 
-`scripts/cf-open-public.sh` 负责开：撤掉 Access 应用，并把本站域名加进 zone 上那条已有的高威胁分数规则（免费计划只有 5 条自定义规则，已经用满，所以是**并入**而不是新增）。三种模式：
-
-```bash
-export CLOUDFLARE_API_TOKEN=...   # 需要 Zone→Rulesets Edit + Account→Access Edit
-bash scripts/cf-open-public.sh --check   # 只读，看现在是什么
-bash scripts/cf-open-public.sh --plan    # 算出要改成什么，不发请求
-bash scripts/cf-open-public.sh           # 执行
-```
-
-要重新关回门禁：`bash scripts/cf-create-access.sh`（会重建 Access 应用与 `/api/img/*` 的 bypass）。
+> 上游曾经用 `scripts/cf-open-public.sh` 一键切换开关（撤掉 Access 应用 + 把本站域名**并入** zone 上那条已有的高威胁分数规则——免费计划只有 5 条自定义规则，已经用满，所以是并入而不是新增）。该脚本已随本 fork 的清理移除；这套操作现在需要手工在 Cloudflare 后台做，或者自己按需重写。
 
 ## 稿件存储
 
@@ -248,7 +245,7 @@ python -c "import secrets,base64;print('mopai_'+base64.urlsafe_b64encode(secrets
 
 ## 环境变量
 
-复制 `.env.example` 为 `.env`。生产环境必需的六项：
+复制 `.env.example` 为 `.env`。生产环境必需的七项：
 
 | 变量 | 用途 |
 |---|---|
@@ -257,8 +254,12 @@ python -c "import secrets,base64;print('mopai_'+base64.urlsafe_b64encode(secrets
 | `DATABASE_URL` | `file:./data/mopai.db` |
 | `ACCESS_KEY` | 站长口令：登录后才有云端草稿箱。**上传图片不需要它**。`openssl rand -hex 24` |
 | `SESSION_SECRET` | 会话签名。`openssl rand -hex 32` |
-| `IMG_BASE_URL` | 图片 Worker 地址 |
+| `IMG_BASE_URL` | 图片 Worker 地址（自定义域，如 `https://img.example.com`） |
 | `IMG_ADMIN_KEY` | 与 Worker secret 同值。`openssl rand -hex 32` |
+
+**Docker 部署另有两项注意**：`HOST` 必须是 `0.0.0.0`（容器内监听回环就等于没监听，compose 已显式覆盖）；隧道 token **不放在 `.env`**，放 `secrets/tunnel-token` 只挂给 `cloudflared`，原因见[「部署」](#部署)。
+
+**改 `ACCESS_KEY` 不会让已登录的人掉线**——会话只验 `SESSION_SECRET`（`api/session.ts`），而 cookie 有效期一年。要强制所有人重新登录，得同时换 `SESSION_SECRET`。
 
 可选项，用来收紧「不登录也能上传」的额度（默认值就是线上跑的）：
 
@@ -313,41 +314,83 @@ node scripts/cdp-verify-trash.mjs      # 回收站（含未登录路径）
 
 ## 部署
 
-构建产物是自包含的，**服务器上不需要 `npm ci`**（Tokyo 机器只有 2 GB 内存，装依赖会 OOM）：
+本 fork 用 Docker 部署（`Dockerfile` + `docker-compose.yml`）。多阶段构建，**运行镜像里没有 `node_modules`**——`dist/boot.js` 由 esbuild 全内联，运行时只用 Node 内置模块；容器以非 root（uid 1000）运行，SQLite 落在 named volume 上。
 
 ```bash
-# 本地
-npm run build
-tar -czf /tmp/mopai-release.tar.gz dist
-scp /tmp/mopai-release.tar.gz cc-tokyo-01:/tmp/
+# 一次性准备
+cp .env.example .env    # 然后填值
 
-# 服务器
-bash scripts/server-install-release.sh
+# 起站点
+docker compose pull     # 拉取镜像，首次和每次更新都要
+docker compose up -d
+docker compose logs -f app
 ```
 
-`scripts/` 下的脚本按用途分三类，都是幂等的：
+镜像发布在 Docker Hub 的 **`suxinljh/mopai`** 上，所以部署主机（NAS）只需要 `docker-compose.yml` + `.env` 两个文件，**不需要源码树**：
 
-- `cf-create-bucket.sh` / `cf-create-tunnel.sh` / `cf-create-access.sh` / `cf-open-public.sh` — Cloudflare 侧资源与门禁开关
-- `server-bootstrap.sh` — 用户、目录、systemd 单元、cloudflared 配置
-- `server-install-release.sh` — 解包、安装、重启
-- `server-acceptance-test.sh` — 服务器上跑一遍上传回路验收
+- `image:` 默认写的是 **`latest`**；每次发版会同时推一个日期 tag（如 `suxinljh/mopai:2026-10-08`），想锁定版本就把它替换进去。
+- 更新是**两步**，`pull` 不能省：compose 只在被明确要求时才重新拉取，光敲 `up -d` 会安安静静复用本地那个旧的 `latest`，现象就是「更新了但没变化」。
 
-Cloudflare 脚本要一个**有写权限**的 token（`Zone → Rulesets Edit`、`Account → Access → Apps and Policies Edit`），自己 export 进环境：
+`docker-compose.yml` 里**故意没有 `build:`**——它只是**运行时**描述符。部署主机上没有源码树，留着 `build:` 只会让 Docker 界面的「构建」按钮变成一个永远点不完的坏按钮（实测报 `failed to read dockerfile: open Dockerfile: no such file or directory`）。
+
+registry 拉不动时（大陆网络直连 Docker Hub 常常不通）可以退回离线包，效果一样：
 
 ```bash
-export CLOUDFLARE_API_TOKEN=...
-bash scripts/cf-open-public.sh --check
+# 有源码的机器：构建，再导出成一个文件
+docker build -t suxinljh/mopai:latest .
+docker save suxinljh/mopai:latest | gzip > mopai-image.tar.gz
+
+# 部署主机：导入，然后直接起（不要点「构建」）
+gunzip -c mopai-image.tar.gz | docker load   # 必须出现 Loaded image: suxinljh/mopai:latest
+docker compose up -d
 ```
 
-只读 token 不会报「权限不足」，而是写操作统一返回 **HTTP 405 / 错误码 10405 `Method not allowed for this authentication scheme`**——看到它就说明该换 token 了。
-
-往服务器推脚本时用 `scripts/stage-to-tokyo.sh`，不要直接用 PowerShell 管道：
+`cloudflared` 挂在 **`tunnel` profile** 下，所以 `docker compose up -d` 默认**只起 `app`**——不需要先有隧道 token，直接用 `http://<宿主机IP>:3100` 就能把站点验通。选定域名后再把隧道一并拉起：
 
 ```bash
-wsl -e bash scripts/stage-to-tokyo.sh 'E:\...\scripts\server-install-release.sh' /tmp/install.sh
+mkdir -p secrets && printf '%s' '<你的隧道 token>' > secrets/tunnel-token && chmod 600 secrets/tunnel-token
+docker compose --profile tunnel up -d
 ```
 
-PowerShell 管道会把末尾换行转成 CRLF，bash 会在最后一行报 `$'\r': command not found`。上面的脚本走 Windows → WSL → ssh，字节原样过去，并在远端复查 CR 数量。
+两个服务：`app`（Node 站点 + SQLite）与 `cloudflared`（拨出到 Cloudflare）。云隧道未启用时，`app` 会映射宿主 `3100`，**这是全栈里唯一不经隧道的一条路**——站点正式上线后建议把 `docker-compose.yml` 里 `app` 的 `ports:` 收窄成 `127.0.0.1:3100:3100`（只在宿主机本机可访问，仍便于调试）或整段删掉，让隧道成为唯一入口，这样也不必再维护宿主防火墙规则。
+
+### 隧道 hostname 要在后台配
+
+本项目用的是 **remotely-managed** 隧道（`cloudflared tunnel run` 只吃 token），hostname 与 ingress **不写在任何文件里**：
+
+> Zero Trust → Networks → Tunnels → 你的隧道 → Public hostnames → 添加
+> `你的站点域名` → Service: **`http://app:3100`**
+
+⚠️ 是 compose 服务名 **`app`**，不是 `127.0.0.1`——容器里的 `127.0.0.1` 指容器自己。同理 `.env` 的 `HOST` 必须是 `0.0.0.0`（compose 已显式覆盖，但直接 `docker run` 会踩这个坑）。
+
+### 隧道 token 为什么不在 `.env` 里
+
+`docker-compose.yml` 用 `env_file` 把 `.env` 的每个键注进 `app` 容器。`app` 是唯一处理不可信上传内容的组件，若它拿到隧道 token，一旦被攻破就能自建隧道、把本机其它服务暴露到公网。所以 token 放 `secrets/tunnel-token`（已被 `.gitignore` 与 `.dockerignore` 排除），只以只读方式挂给 `cloudflared`。启用 `tunnel` profile 后若该文件缺失，Docker 会直接拒绝启动，不会静默跑成无隧道。
+
+### ⚠️ 主机名冲突
+
+图床 Worker 绑在自定义域上（`mopai-worker/wrangler.toml` 的 `[[routes]]`）。**同一个主机名不能既是 R2 自定义域又是 Worker 自定义域**——如果该域名此前已在 R2 设置里绑给某个桶，`wrangler deploy` 会失败，需要先去 R2 解绑。
+
+### 更新
+
+```bash
+git pull
+docker compose pull              # 拿到新镜像
+docker compose up -d             # 只重建 app；数据在 volume 里不受影响
+                                 # 隧道已经在跑就加上 --profile tunnel
+```
+
+有源码的机器上发布新版本：
+
+```bash
+docker build -t suxinljh/mopai:latest -t suxinljh/mopai:$(date +%F) .
+docker push suxinljh/mopai:latest
+docker push suxinljh/mopai:$(date +%F)
+```
+
+### 上游原来的 VPS 方案（已移除）
+
+上游在 Tokyo 的 VPS 上直跑 `dist/boot.js`，靠 systemd（`mopai.service`，内存上限 384M）+ locally-managed 隧道。本 fork 已删除那批引导脚本（`scripts/cf-*.sh`、`scripts/server-*.sh`、`scripts/stage-to-tokyo.sh`、`scripts/test-round2.ps1`），Docker 路线不需要它们。删掉还有个安全理由：它们写死了上游账号 ID 与隧道 ID，误跑会往别人账号里建资源。
 
 ## 公众号兼容红线
 

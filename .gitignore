@@ -17,3 +17,6 @@ verify-out/
 # worker local secrets
 mopai-worker/.dev.vars
 mopai-worker/node_modules/
+
+# tunnel token, mounted read-only into the cloudflared container by docker-compose.yml
+secrets/

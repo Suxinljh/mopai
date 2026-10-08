@@ -901,6 +901,15 @@ const SPECS: ImportedThemeSpec[] = [
       "td": "padding: 10px 15px; border: 1px solid #e0e0e0; color: #121212;"
     },
   },
+  // ⚠️ 本 fork 定制（2026-10-08）：整套主题的品牌色由日経红 #C41230 换成品牌粉，分两档用 ——
+  //   装饰档 #ff74f9（原色）：palette 的 soft/quoteBg、h2 左竖线、h4 下划线、blockquote 左右边线、
+  //                            表头底色与边框、strong/mark 的 35% 透明底、mark 下划线；
+  //   文字档 #e742dc（同色相加深；白底对比度 3.4:1，原色只有 2.3:1 偏淡）：
+  //                            palette 的 heading/accent/codeText、h2 文字、em、inline code。
+  // 另加：图片去描边改 12px 圆角；strong 与 mark 共用品牌粉 35% 底色
+  // （mark 保留下划线，免得和加粗分不出来）；表头文字由白改黑
+  // （白字打亮粉上只有 2.3:1，黑字 9.1:1）。
+  // 以上均为对上游 nikkei 规格的手改，重跑 npm run import:themes 会被覆盖，届时需重新施加。
   {
     id: "huasheng-nikkei",
     name: "Nikkei 日経",
@@ -926,34 +935,35 @@ const SPECS: ImportedThemeSpec[] = [
       "background": "#FFFFFF",
       "text": "#1A1A1A",
       "muted": "#7A7A7A",
-      "heading": "#C41230",
-      "accent": "#C41230",
-      "soft": "#F1C6CD",
+      "heading": "#E742DC",
+      "accent": "#E742DC",
+      "soft": "#FFCEFD",
       "border": "#DDDDDD",
-      "quoteBg": "#FBF1F3",
+      "quoteBg": "#FFF0FE",
       "codeBg": "#F5F5F5",
-      "codeText": "#C41230"
+      "codeText": "#E742DC"
     },
     styles: {
       "wrapper": "max-width: 650px; margin: 0 auto; padding: 10px 12px 20px 12px; font-family: \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", \"Meiryo\", sans-serif; font-size: 15px; line-height: 1.6; color: #1a1a1a; background-color: #fff; word-wrap: break-word;",
       "h1": "font-size: 24px; font-weight: 700; color: #000; line-height: 1.3; margin: 25px 0 15px; padding-bottom: 8px; border-bottom: 2px solid #000;",
-      "h2": "font-size: 18px; font-weight: 700; color: #c41230; line-height: 1.4; margin: 20px 0 12px; padding-left: 10px; border-left: 3px solid #c41230;",
+      "h2": "font-size: 18px; font-weight: 700; color: #e742dc; line-height: 1.4; margin: 20px 0 12px; padding-left: 10px; border-left: 3px solid #ff74f9;",
       "h3": "font-size: 16px; font-weight: 600; color: #000; line-height: 1.4; margin: 18px 0 10px; padding: 4px 8px; background-color: #f5f5f5;",
-      "h4": "font-size: 15px; font-weight: 600; color: #333; line-height: 1.5; margin: 15px 0 8px; text-decoration: underline; text-decoration-color: #c41230; text-underline-offset: 3px;",
+      "h4": "font-size: 15px; font-weight: 600; color: #333; line-height: 1.5; margin: 15px 0 8px; text-decoration: underline; text-decoration-color: #ff74f9; text-underline-offset: 3px;",
       "p": "margin: 12px 0; line-height: 1.6; color: #1a1a1a; text-align: justify;",
-      "strong": "font-weight: 700; color: #000; background-color: #fff3f3; padding: 0 2px;",
-      "em": "font-style: normal; color: #c41230; font-weight: 600;",
+      "strong": "font-weight: 700; color: #000; background-color: rgba(255, 116, 249, 0.35); padding: 0 2px;",
+      "mark": "font-weight: 700; color: #000; background-color: rgba(255, 116, 249, 0.35); border-bottom: 2px solid #ff74f9; padding: 0 2px;",
+      "em": "font-style: normal; color: #e742dc; font-weight: 600;",
       "a": "color: #0066cc; text-decoration: none; border-bottom: 1px solid #0066cc;",
       "ul": "margin: 15px 0; padding-left: 28px; list-style-type: disc;",
       "ol": "margin: 15px 0; padding-left: 28px; list-style-type: decimal;",
       "li": "margin: 6px 0; line-height: 1.6; color: #1a1a1a;",
-      "blockquote": "margin: 16px 0; padding: 10px 15px; background-color: transparent; border-left: 2px solid #c41230; border-right: 2px solid #c41230; color: #1a1a1a; font-size: 14px; line-height: 1.5;",
-      "code": "font-family: \"Courier New\", monospace; font-size: 13px; padding: 2px 4px; background-color: #f5f5f5; color: #c41230;",
+      "blockquote": "margin: 16px 0; padding: 10px 15px; background-color: transparent; border-left: 2px solid #ff74f9; border-right: 2px solid #ff74f9; color: #1a1a1a; font-size: 14px; line-height: 1.5;",
+      "code": "font-family: \"Courier New\", monospace; font-size: 13px; padding: 2px 4px; background-color: #f5f5f5; color: #e742dc;",
       "pre": "margin: 20px 0; padding: 15px; background-color: #f5f5f5; border: 1px solid #ddd; overflow-x: auto; line-height: 1.4;",
       "hr": "margin: 30px 0; border: none; height: 1px; background-color: #000;",
-      "img": "max-width: 100%; max-height: 400px; height: auto; display: block; margin: 20px auto; border: 1px solid #ddd;",
+      "img": "max-width: 100%; max-height: 400px; height: auto; display: block; margin: 20px auto; border-radius: 12px;",
       "table": "width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 14px; border: 1px solid #000;",
-      "th": "background-color: #c41230; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; border: 1px solid #c41230;",
+      "th": "background-color: #ff74f9; color: #000; padding: 8px 10px; text-align: left; font-weight: 600; border: 1px solid #ff74f9;",
       "td": "padding: 6px 10px; border: 1px solid #ddd; color: #1a1a1a; background-color: #fff;"
     },
   },

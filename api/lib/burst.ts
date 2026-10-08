@@ -1,10 +1,10 @@
 /**
  * Per-IP burst limit for the open upload endpoint.
  *
- * Cloudflare's free plan allows exactly one rate limiting rule per zone, and
- * this zone already spends it elsewhere — see scripts/cf-open-public.sh. The
- * daily quota in anon-quota.ts bounds how much one visitor can store, but not
- * how fast they can hammer the endpoint; this is the other half.
+ * Cloudflare's free plan allows exactly one rate limiting rule per zone, and on
+ * the upstream deployment that rule was already spent by another project in the
+ * same zone. The daily quota in anon-quota.ts bounds how much one visitor can
+ * store, but not how fast they can hammer the endpoint; this is the other half.
  *
  * Deliberately in-memory: it is best-effort, resets on restart, and is not
  * shared between instances. That is enough to stop a flood, and it costs a

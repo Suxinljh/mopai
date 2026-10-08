@@ -22,7 +22,7 @@ const withVisitor = t.middleware(async ({ ctx, next }) => {
   if (existing) return next({ ctx: { ...ctx, visitor: visitorKey(existing) } });
 
   const id = newVisitorId();
-  ctx.resHeaders.append("set-cookie", visitorCookie(id, ctx.req.headers));
+  ctx.resHeaders.append("set-cookie", visitorCookie(id, ctx.req.headers, ctx.req.url));
   return next({ ctx: { ...ctx, visitor: visitorKey(id) } });
 });
 

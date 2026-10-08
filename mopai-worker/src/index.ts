@@ -7,11 +7,19 @@
  *
  * The R2 bucket is never exposed directly: this worker owns the binding, so the
  * VPS holds no S3 credentials at all.
+ *
+ * Objects live under KEY_PREFIX (`wechat/`) inside a bucket shared with other
+ * projects. That prefix is invisible from the outside — see objectKey().
  */
 
 interface Env {
   BUCKET: R2Bucket
   IMG_ADMIN_KEY: string
+  /**
+   * Object-key prefix, e.g. "wechat/". Set in wrangler.toml [vars]; optional so a
+   * deployment that owns a dedicated bucket can leave objects at the root.
+   */
+  KEY_PREFIX?: string
 }
 
 const MAX_BYTES = 20 * 1024 * 1024
@@ -50,10 +58,27 @@ function validKey(key: string): boolean {
   return key.length > 0 && key.length <= 200 && !key.includes('..') && !key.startsWith('/')
 }
 
+/**
+ * The `wechat/` namespacing is deliberately kept inside this worker.
+ *
+ * The app stores whatever key it is handed (api/storage-router.ts) and hands
+ * that same key back for deletion, so the prefix must never appear in a
+ * response, in `files.key`, or in a public URL. Adding it here — on the way to
+ * the bucket — and stripping it on the way back is what keeps it an
+ * implementation detail. A key that already carries the prefix is passed
+ * through unchanged, so a replayed or hand-written request cannot produce
+ * `wechat/wechat/...`.
+ */
+function objectKey(key: string, env: Env): string {
+  const prefix = env.KEY_PREFIX
+  if (!prefix || key.startsWith(prefix)) return key
+  return prefix + key
+}
+
 async function handleRead(key: string, env: Env, request: Request): Promise<Response> {
   if (!validKey(key)) return json({ error: 'bad key' }, 400)
 
-  const object = await env.BUCKET.get(key)
+  const object = await env.BUCKET.get(objectKey(key, env))
   if (!object) return json({ error: 'not found' }, 404)
 
   const headers = new Headers()
@@ -81,17 +106,19 @@ async function handlePut(key: string, env: Env, request: Request): Promise<Respo
   const contentType =
     request.headers.get('Content-Type') || 'application/octet-stream'
 
-  await env.BUCKET.put(key, body, {
+  await env.BUCKET.put(objectKey(key, env), body, {
     httpMetadata: { contentType, cacheControl: IMMUTABLE },
     customMetadata: { uploadedAt: new Date().toISOString() },
   })
 
+  // `key`, not `objectKey(key, env)`: the caller stores this and later passes it
+  // back verbatim, so what it receives must be the key it sent.
   return json({ key, size: body.byteLength }, 200)
 }
 
 async function handleDelete(key: string, env: Env): Promise<Response> {
   if (!validKey(key)) return json({ error: 'bad key' }, 400)
-  await env.BUCKET.delete(key)
+  await env.BUCKET.delete(objectKey(key, env))
   return json({ key, deleted: true }, 200)
 }
 

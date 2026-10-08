@@ -43,8 +43,14 @@ harness 会在父仓库自建分支或 worktree。并行干活必须遵守：
   - `npm run import:themes` — 从上游克隆重新生成 `src/lib/themes-imported/`（上游位置见 THEME-SOURCES.md）
   - `node scripts/cdp-verify-theme-library.mjs <url> <key> 9334` — 模板库页的真实浏览器验收
   - `node scripts/cdp-verify-public-access.mjs <url> 9335` — **不登录**走一遍上传全链路的真实浏览器验收
-  - `bash scripts/cf-open-public.sh --check|--plan|（空）` — Cloudflare 门禁开关（撤 Access + 并入威胁分数规则）
   - `npm run dev` — 本地开发
+
+> **本 fork 的差异**：部署已从「Tokyo VPS + systemd」改为 **Docker**（见仓库根 `Dockerfile` /
+> `docker-compose.yml`，步骤见 `README.md` 的「部署」节）。原先那批引导与验收脚本
+> （`scripts/cf-*.sh`、`scripts/server-*.sh`、`scripts/stage-to-tokyo.sh`、`scripts/test-round2.ps1`）
+> **已从本仓库删除**，本文档中凡提到它们的地方都只作历史记录，照抄会报「文件不存在」。
+> 保留的脚本是 `scripts/verify-themes.ts`、`scripts/themes/**`（`package.json` 硬绑定，
+> `src/lib/themes-imported/` 是它们的产物）以及那组 `cdp-verify-*.mjs`。
 
 本地身份可以随便填，`ACCESS_KEY` / `SESSION_SECRET` 用 `.env.example` 里的占位值即可。
 测匿名额度不用等一天：起服务时压小就行，例如
@@ -119,7 +125,12 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 
 ---
 
-## 三、部署形态（这些细节踩过坑，照做）
+## 三、上游的部署形态（**本 fork 已改用 Docker，本节仅作历史背景**）
+
+> ⚠️ 本节描述的是**上游原作者**的 VPS 方案，其中引用的脚本**已全部删除**。当前部署方式是
+> Docker（`Dockerfile` + `docker-compose.yml`），见 `README.md` 的「部署」节。下表的
+> 架构结论仍然成立（`/api/img/*` 必须公网可读、Worker 持 R2 binding、SQLite 落盘位置等），
+> 但具体的机器名、隧道 ID、账号 ID 都是上游的，不要照搬。
 
 | 部件 | 位置 |
 |---|---|
@@ -127,7 +138,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 | 进程 | `mopai.service`（systemd，内存上限 384M，实测吃 ~35MB）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev`，tunnel id `1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14`（ingress 在服务器 `/etc/cloudflared/mopai.yml`） |
 | 门禁 | **站点公开，没有 Cloudflare Access**（2026-10-08 撤掉，之前是邮箱验证只放行站长）。撤的方式：本机的 CF token 只读写不动，于是借一个已登录 dashboard 的浏览器会话，走它的同源代理 `dash.cloudflare.com/api/v4/...` 删掉了两个 Access 应用；同一会话把本站并入了 zone 上那条高威胁分数 challenge 规则（现在 `http.host in {"app..." "wechat..."}`）。`ACCESS_KEY` 只决定谁能用云端草稿箱；排版、上传、复制、导出都不用登录 |
-| 图片公网读 | 站点公开之后 `/api/img/*` 自然是公网可读（微信抓图必须匿名可达）。以前那个 bypass Access 应用已随之删除。若将来把门禁关回去，必须同时建一个 bypass 应用放行 `/api/img/*`（`cf-create-access.sh` 里已有这段，路径最具体者优先）；同理若放行 `/api/agent/*`，**绝不能连带放行 `/api/trpc/*`**——那里有 `auth.login` |
+| 图片公网读 | 站点公开之后 `/api/img/*` 自然是公网可读（微信抓图必须匿名可达）。以前那个 bypass Access 应用已随之删除。若将来把门禁关回去，必须同时建一个 bypass 应用放行 `/api/img/*`（Access 应用按路径**最具体者优先**匹配）；同理若放行 `/api/agent/*`，**绝不能连带放行 `/api/trpc/*`**——那里有 `auth.login` |
 | 防滥用 | 应用层四道（IP 突发限流 / 访客 24h 额度 / 匿名总量封顶 / 字节头判类型）+ zone 上已有的 WAF 规则。细节与「刻意没做的三件事」见 `app/README.md`「公开之后靠什么挡滥用」 |
 | 图片存储 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite，`/opt/mopai/app/data/mopai.db` |
@@ -148,7 +159,7 @@ scp $env:TEMP\mopai.tar.gz cc-tokyo-01:/tmp/mopai-release.tar.gz
 ssh cc-tokyo-01 'bash /tmp/install.sh'
 ```
 
-`scripts/server-install-release.sh` 就是那个 install 脚本（解包 → 装到 /opt/mopai/app → **restart** → 健康检查）。
+（上游那个 install 脚本 `scripts/server-install-release.sh` 已删除；它做的是解包 → 装到 /opt/mopai/app → **restart** → 健康检查。Docker 路线只需 `docker compose up -d --build`。）
 
 **部署后必须核对**：本地与线上的 `dist/boot.js` sha256、以及 `dist/public/index.html` 引用的 js/css 文件名是否一致。前一轮出现过"以为部署了、其实服务器还在跑旧包"。
 
@@ -224,25 +235,20 @@ git push origin master                                # 普通推送，不是 fo
 `scripts/cdp-verify-public-access.mjs` 里原本用黑名单校验脱敏，被 scrub 改成两个相同占位符后
 静默失效，现已改成正向断言示例稿自己的标题。
 
-### ⚠️ 往服务器推脚本的坑
+### ~~往服务器推脚本的坑~~（脚本已删除，仅留教训）
 
-**不要用 PowerShell 管道推脚本**——它会把末尾换行变成 CRLF，bash 会在最后一行报 `$'\r': command not found`。
+**不要用 PowerShell 管道推脚本**——它会把末尾换行变成 CRLF，bash 会在最后一行报 `$'\r': command not found`。上游当时用 `scripts/stage-to-tokyo.sh`（走 WSL，字节原样过去）绕开，该脚本已删除；Docker 路线不再往服务器推脚本，但这个 CRLF 陷阱在其它 `scp`/管道场景里依然成立。
 
-用 `scripts/stage-to-tokyo.sh`，且**必须在 WSL 里跑**：
+### 服务器上的验收脚本（已删除）
 
-```powershell
-wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚本的 /mnt/e/... 路径>' /tmp/xxx.sh"
+上游在 `/opt/mopai/scripts/` 放了三套（`server-acceptance-test.sh` 站点可达/登录/上传/公网 302→200/未登录被拦、`server-e2e-check.sh` 图片全链路、`server-round2-check.sh` 稿件 CRUD 与孤儿图清理），由 `verify-all.sh` 一次跑完。**这三套已随本 fork 的清理删除。**
+
+对应能力现在由本地测试与 CDP 验收覆盖，改了 API 或数据结构后跑这些并保证 exit code 为 0：
+
+```bash
+npm run check && npm test        # tsc + 994 项 vitest（含上传额度、数据库升级）
+node scripts/cdp-verify-public-access.mjs <url> 9335   # 不登录走一遍上传全链路
 ```
-
-### 服务器上的验收脚本
-
-`/opt/mopai/scripts/` 下有三套，`verify-all.sh` 一次跑完：
-
-- `server-acceptance-test.sh` — 站点可达、登录、上传、公网 302→200、未登录被拦
-- `server-e2e-check.sh` — 图片全链路（上传→公网取回→删除）
-- `server-round2-check.sh` — 稿件 CRUD、草稿箱语义、存储统计、孤儿图清理
-
-改了 API 或数据结构后，**改完必须重跑并让 exit code 保持 0**。
 
 ---
 
@@ -270,11 +276,11 @@ wsl -e bash -lc "bash '<umbrella repo root>/app/scripts/stage-to-tokyo.sh' '<脚
 3. **`DialogContent` 没有 max-height 和滚动**（`src/components/ui/dialog.tsx`）。弹窗比窗口高时上下被裁且够不到。现有两个弹窗自己加了 `max-h-[90vh] overflow-y-auto` 和吸底按钮——**新加弹窗要注意同样问题**。
 4. **`react-easy-crop` 的样式表必须手动 import**（`import 'react-easy-crop/react-easy-crop.css'`），否则裁切框不可见。
 5. **tRPC 的错误是 HTTP 200 + error 信封**，`curl | head -c` 会吞掉信号。测试脚本要显式检查有没有 `result` 信封、有没有 `NaN`。
-6. **会话 cookie 是 `Secure`**，本地/服务器上用纯 HTTP 测试时 curl 的 cookie jar 会静默丢弃它——改成手工捕获 `set-cookie` 头回放。
+6. **会话 cookie 的 `Secure`/`SameSite` 跟随请求协议，不看主机名**（`api/lib/cookies.ts`，`x-forwarded-proto` 优先）。纯 HTTP 下是 `SameSite=Lax` 且不带 `Secure`，curl 的 cookie jar 正常工作；只有 https（或带 `x-forwarded-proto: https`，比如隧道/反代后面）才下发 `Secure; SameSite=None`——这种 cookie 再用 http 回放会被 jar 静默丢弃，要手工捕获 `set-cookie` 头。**历史教训**：这条属性曾经只豁免 `localhost`/`127.0.0.1`，于是 NAS 那种「局域网 IP + 纯 HTTP」的部署拿到的是 `Secure` cookie，浏览器直接扔掉——登录接口明明返回 success，之后每个请求却仍是匿名的。`api/lib/cookies.test.ts` 钉住这三种情形。
 7. **round2 验收脚本**断言的是"增量"而不是绝对值（别的脚本会留下自己的测试图），并且预清理只删**它自己生成的文件名**。别改成"把现有的都删掉"——前一轮就是这样误删了用户的真实上传。
 8. **默认示例稿已脱敏**（2026-10-07）：`src/lib/sample.ts` 的 `SAMPLE_DOC` 以前是站长公司的宣传稿，随公开仓库外泄过，现已换成中性的「示例稿 · 语法速览」（覆盖全部语法，同时是 golden 主题的验收样例）。**服务器数据库里还留着改名前的那一行默认稿**（`ownerId=1`、`savedAt` 为 null），那是站长私有数据、登录后才读得到；别在诊断时对它跑无差别 DELETE。旧文本仍存在于公开仓库的历史提交里——工作树已经干净，要连历史一起清掉只能走全量重建（见「公开仓库与发布流水线」）。
 9. **给 `files` 加列必须加在最后**。drizzle 的 `sqlite-proxy` 驱动按**位置**映射行，而 `ALTER TABLE ... ADD COLUMN` 只会追加到末尾；`db/schema.ts` 里声明的顺序一旦和物理顺序不一致，读出来的字段会整体错位，而且**不报错**。`api/queries/files-upgrade.test.ts` 就是钉这件事的。同理，`CREATE INDEX` 引用新列必须放在 `ALTER` 之后——旧库上 `CREATE TABLE IF NOT EXISTS` 是 no-op，先建索引会直接 `no such column`。
-10. **改 Cloudflare 之前先确认 token 能写**。只读 token 的写操作回 `HTTP 405 / 10405`，不是「权限不足」那种一眼能认的错。免费额度已经用满（见部署形态表），加规则前先 `bash scripts/cf-open-public.sh --check` 看清 zone 上已有什么。
+10. **改 Cloudflare 之前先确认 token 能写**。只读 token 的写操作回 `HTTP 405 / 10405`，不是「权限不足」那种一眼能认的错。免费额度已经用满（见部署形态表），加规则前先在 dashboard 里看清 zone 上已有什么（上游用 `scripts/cf-open-public.sh --check` 做这件事，该脚本已删除）。
 11. **脚本里调 tRPC：查询用 GET，变更用 POST**。用 POST 打查询会得到 `Unsupported POST-request to query procedure`，而 HTTP 状态还是 200，很容易误判成"接口坏了"。
 
 ---

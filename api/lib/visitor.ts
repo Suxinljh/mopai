@@ -27,8 +27,8 @@ export function visitorKey(id: string): string {
   return createHash('sha256').update(`mopai-visitor:${id}`).digest('hex').slice(0, 32)
 }
 
-export function visitorCookie(id: string, headers: Headers): string {
-  const opts = getSessionCookieOptions(headers)
+export function visitorCookie(id: string, headers: Headers, url: string): string {
+  const opts = getSessionCookieOptions(headers, url)
   return cookie.serialize(VISITOR_COOKIE, id, {
     httpOnly: opts.httpOnly,
     path: opts.path,
