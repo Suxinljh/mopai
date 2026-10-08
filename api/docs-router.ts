@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { docs } from "../db/schema";
@@ -41,9 +41,10 @@ export const docsRouter = createRouter({
         content: docs.content,
         updatedAt: docs.updatedAt,
         savedAt: docs.savedAt,
+        source: docs.source,
       })
       .from(docs)
-      .where(eq(docs.ownerId, ctx.user.id))
+      .where(and(eq(docs.ownerId, ctx.user.id), isNull(docs.deletedAt)))
       .orderBy(desc(docs.updatedAt));
   }),
 
@@ -56,9 +57,10 @@ export const docsRouter = createRouter({
         content: docs.content,
         updatedAt: docs.updatedAt,
         savedAt: docs.savedAt,
+        source: docs.source,
       })
       .from(docs)
-      .where(and(eq(docs.ownerId, ctx.user.id), isNotNull(docs.savedAt)))
+      .where(and(eq(docs.ownerId, ctx.user.id), isNotNull(docs.savedAt), isNull(docs.deletedAt)))
       .orderBy(desc(docs.savedAt));
   }),
 
@@ -104,7 +106,16 @@ export const docsRouter = createRouter({
     } else {
       await getDb()
         .update(docs)
-        .set({ name: input.name, content: input.content, updatedAt: now, savedAt: now })
+        .set({
+          name: input.name,
+          content: input.content,
+          updatedAt: now,
+          savedAt: now,
+          // Saving is an explicit act of keeping the article, so a row trashed
+          // from another device mid-session comes back rather than being
+          // archived somewhere the owner cannot see.
+          deletedAt: null,
+        })
         .where(eq(docs.id, input.id));
     }
     return { ok: true, savedAt: now.getTime() };
@@ -149,7 +160,52 @@ export const docsRouter = createRouter({
       return { imported: fresh.length };
     }),
 
+  /**
+   * 移入回收站，不是销毁。行还在，`list` / `drafts` 跳过它，`restore` 能把它
+   * 原样请回来。
+   */
   remove: authedQuery
+    .input(z.object({ id: z.string().min(1).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      await getDb()
+        .update(docs)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(docs.id, input.id), eq(docs.ownerId, ctx.user.id)));
+      return { ok: true };
+    }),
+
+  /** 回收站： newest first, without the content — the bin only needs names. */
+  trash: authedQuery.query(async ({ ctx }) => {
+    return getDb()
+      .select({
+        id: docs.id,
+        name: docs.name,
+        savedAt: docs.savedAt,
+        deletedAt: docs.deletedAt,
+      })
+      .from(docs)
+      .where(and(eq(docs.ownerId, ctx.user.id), isNotNull(docs.deletedAt)))
+      .orderBy(desc(docs.deletedAt));
+  }),
+
+  restore: authedQuery
+    .input(z.object({ id: z.string().min(1).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      await getDb()
+        .update(docs)
+        .set({ deletedAt: null })
+        .where(and(eq(docs.id, input.id), eq(docs.ownerId, ctx.user.id)));
+      // The bin only carries names, so the restored article's content has to
+      // come back with this response.
+      const row = await findOwnedDoc(ctx.user.id, input.id);
+      return { ok: true, doc: row };
+    }),
+
+  /**
+   * 彻底删除。它引用的图片随后会出现在素材库的「没在用的旧图」里，那是既有
+   * 的清理入口，不在这里连带删图。
+   */
+  purge: authedQuery
     .input(z.object({ id: z.string().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       await getDb()

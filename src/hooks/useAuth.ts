@@ -19,6 +19,7 @@ export function useAuth(options?: UseAuthOptions) {
   const {
     data: user,
     isLoading,
+    isFetching,
     error,
     refetch,
   } = trpc.auth.me.useQuery(undefined, {
@@ -49,10 +50,13 @@ export function useAuth(options?: UseAuthOptions) {
       user: user ?? null,
       isAuthenticated: !!user,
       isLoading: isLoading || logoutMutation.isPending,
+      // `isLoading` is false while a refetch of a cached `null` is in flight, so
+      // anything that must not act until the answer is final checks this too.
+      isFetching,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isLoading, isFetching, logoutMutation.isPending, error, logout, refetch],
   );
 }

@@ -25,6 +25,10 @@ export type FileRow = typeof files.$inferSelect;
 //
 // `savedAt` 为 null 表示只是编辑中的工作稿，还没被主动保存；草稿箱只列
 // savedAt 有值的，这样自动同步的工作稿不会混进归档。
+// `deletedAt` 有值表示在回收站里：列表和草稿箱都跳过它，但行还在，恢复就是
+// 把这个字段清回 null。彻底删除才真的 DELETE。
+// `source` 记这篇稿子是谁推进来的：null = 网页里建的，`agent:<令牌名>` = 某个
+// Agent 通过 /api/agent 推的。只有一个身份维度，所以不再另加 agentId。
 export const docs = sqliteTable("docs", {
   id: text("id").primaryKey(),
   ownerId: integer("ownerId").notNull(),
@@ -37,6 +41,8 @@ export const docs = sqliteTable("docs", {
     .notNull()
     .$defaultFn(() => new Date()),
   savedAt: integer("savedAt", { mode: "timestamp" }),
+  deletedAt: integer("deletedAt", { mode: "timestamp" }),
+  source: text("source"),
 });
 
 export type DocRow = typeof docs.$inferSelect;

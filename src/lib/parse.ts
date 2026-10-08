@@ -2,8 +2,9 @@ import MarkdownIt from 'markdown-it'
 import type { Token } from 'markdown-it'
 import markdownItMark from 'markdown-it-mark'
 import markdownItContainer from 'markdown-it-container'
-import type { Block, CarouselRatio, CellAlign, Doc, DocMeta, InlineSeg } from './types'
+import type { Block, CarouselRatio, CellAlign, Doc, DocMeta, InlineSeg, SourceSpan } from './types'
 import { DEFAULT_CAROUSEL_RATIO, isCarouselRatio } from './types'
+import { fencedRanges, isInFence } from './fences'
 
 // ---------- front matter ----------
 // 只支持简单键值与列表，刻意不引入 YAML 依赖：
@@ -14,10 +15,10 @@ import { DEFAULT_CAROUSEL_RATIO, isCarouselRatio } from './types'
 // cover: 封面说明
 // ---
 
-function parseFrontMatter(src: string): { meta: DocMeta; body: string } {
+function parseFrontMatter(src: string): { meta: DocMeta; body: string; offset: number } {
   const meta: DocMeta = { titles: [], cover: '', author: '' }
   const m = src.match(/^\s*---\n([\s\S]*?)\n---\n?/)
-  if (!m) return { meta, body: src }
+  if (!m) return { meta, body: src, offset: 0 }
   const lines = m[1].split('\n')
   let curKey = ''
   for (const raw of lines) {
@@ -36,7 +37,7 @@ function parseFrontMatter(src: string): { meta: DocMeta; body: string } {
       else if (curKey === 'titles' && v) meta.titles.push(v)
     }
   }
-  return { meta, body: src.slice(m[0].length) }
+  return { meta, body: src.slice(m[0].length), offset: m[0].split('\n').length - 1 }
 }
 
 // ---------- markdown-it ----------
@@ -58,15 +59,36 @@ interface Flags {
   link?: string
 }
 
+/** Order-independent identity of a flag set, for deciding whether runs merge. */
+function flagKey(f: Flags): string {
+  return [f.bold, f.mark, f.code, f.italic, f.strike, f.link].map((v) => v ?? '').join('\u0000')
+}
+
 function pushSeg(out: InlineSeg[], text: string, flags: Flags) {
   if (!text) return
   const prev = out[out.length - 1]
-  const key = JSON.stringify(flags)
-  if (prev && JSON.stringify({ bold: prev.bold, mark: prev.mark, code: prev.code, italic: prev.italic, strike: prev.strike, link: prev.link }) === key && prev.text !== '\n' && text !== '\n') {
+  if (prev && flagKey(prev) === flagKey(flags) && prev.text !== '\n' && text !== '\n') {
     prev.text += text
     return
   }
   out.push({ text, ...flags })
+}
+
+/**
+ * Inline emphasis is a stack: an opener pushes the flags as they were and adds
+ * its own, the matching closer pops them back.
+ *
+ * This used to be `Object.assign(flags, stack.pop())`, which silently does
+ * nothing useful: the snapshot has no `bold` key at all, and Object.assign never
+ * deletes one. Every flag therefore stayed set for the rest of the paragraph, so
+ * `**粗** 普通` rendered as one bold run and text after a link inherited that
+ * link. Replacing the object instead of mutating it makes the pop exact.
+ */
+const INLINE_TOGGLE: Record<string, keyof Flags> = {
+  strong: 'bold',
+  em: 'italic',
+  s: 'strike',
+  mark: 'mark',
 }
 
 export function walkInline(children: Token[] | null): InlineSeg[] {
@@ -78,6 +100,20 @@ export function walkInline(children: Token[] | null): InlineSeg[] {
   let flags: Flags = {}
   const stack: Flags[] = []
   for (const t of children) {
+    const toggle = t.type.endsWith('_open') || t.type.endsWith('_close')
+      ? INLINE_TOGGLE[t.type.slice(0, t.type.lastIndexOf('_'))]
+      : undefined
+
+    if (toggle) {
+      if (t.type.endsWith('_open')) {
+        stack.push(flags)
+        flags = { ...flags, [toggle]: true }
+      } else {
+        flags = stack.pop() ?? {}
+      }
+      continue
+    }
+
     switch (t.type) {
       case 'text':
         pushSeg(out, t.content, flags)
@@ -85,32 +121,9 @@ export function walkInline(children: Token[] | null): InlineSeg[] {
       case 'code_inline':
         pushSeg(out, t.content, { ...flags, code: true })
         break
-      case 'strong_open':
-        stack.push({ ...flags }); flags = { ...flags, bold: true }
-        break
-      case 'strong_close':
-        flags = stack.pop() ?? {}
-        break
-      case 'em_open':
-        stack.push({ ...flags }); flags = { ...flags, italic: true }
-        break
-      case 'em_close':
-        flags = stack.pop() ?? {}
-        break
-      case 's_open':
-        stack.push({ ...flags }); flags = { ...flags, strike: true }
-        break
-      case 's_close':
-        flags = stack.pop() ?? {}
-        break
-      case 'mark_open':
-        stack.push({ ...flags }); flags = { ...flags, mark: true }
-        break
-      case 'mark_close':
-        flags = stack.pop() ?? {}
-        break
       case 'link_open':
-        stack.push({ ...flags }); flags = { ...flags, link: String(t.attrGet('href') ?? '') }
+        stack.push(flags)
+        flags = { ...flags, link: String(t.attrGet('href') ?? '') }
         break
       case 'link_close':
         flags = stack.pop() ?? {}
@@ -124,6 +137,22 @@ export function walkInline(children: Token[] | null): InlineSeg[] {
       default:
         break
     }
+  }
+  return out
+}
+
+/**
+ * A paragraph's source text with its line breaks put back.
+ *
+ * `inline.content` joins soft-broken lines, which is right for prose and wrong
+ * for a multi-line `$$…$$` equation: the newlines are part of the TeX.
+ */
+function rawParagraphText(inline: Token | undefined): string {
+  if (!inline?.children) return inline?.content ?? ''
+  let out = ''
+  for (const c of inline.children) {
+    if (c.type === 'softbreak' || c.type === 'hardbreak') out += '\n'
+    else out += c.content
   }
   return out
 }
@@ -145,14 +174,20 @@ function imageFromInline(t: Token): { alt: string; src: string } | null {
  */
 function scanImageOccurrences(body: string): { alt: string; occurrence: number }[] {
   const out: { alt: string; occurrence: number }[] = []
+  const fences = fencedRanges(body)
   const re = /!\[([^\]]*)\]\(/g
   let m: RegExpExecArray | null
-  while ((m = re.exec(body))) out.push({ alt: m[1].trim(), occurrence: out.length + 1 })
+  while ((m = re.exec(body))) {
+    // An image example inside a ``` block is documentation, not an image, and
+    // counting it would shift every real image after it by one.
+    if (isInFence(fences, m.index)) continue
+    out.push({ alt: m[1].trim(), occurrence: out.length + 1 })
+  }
   return out
 }
 
 export function parseMarkdown(src: string): Doc {
-  const { meta, body } = parseFrontMatter(src)
+  const { meta, body, offset } = parseFrontMatter(src)
   const tokens = md.parse(body, {})
   const blocks: Block[] = []
   // Cursor into the raw-scan list; images appear in the same order in both.
@@ -173,6 +208,20 @@ export function parseMarkdown(src: string): Doc {
     return fallback
   }
 
+  // Token maps are relative to `body`; every caller wants a whole-file line so
+  // the editor can scroll to it. Blocks whose token carries no map inherit the
+  // end of the previous one rather than collapsing onto line 0.
+  const totalLines = src.split('\n').length
+  let lastEnd = 0
+  const span = (open: Token | undefined, close?: Token, extraEnd = 0): SourceSpan => {
+    const endMap = close?.map ?? open?.map
+    const line = open?.map ? open.map[0] + offset : lastEnd
+    const raw = endMap ? endMap[1] + offset + extraEnd : line + 1
+    const lineEnd = Math.max(Math.min(raw, totalLines), line + 1)
+    lastEnd = lineEnd
+    return { line, lineEnd }
+  }
+
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]
 
@@ -180,15 +229,16 @@ export function parseMarkdown(src: string): Doc {
       const inline = tokens[i + 1]
       const level = Number(t.tag.slice(1))
       const content = inline?.content || ''
+      const at = span(t)
       if (level === 2) {
         const pipe = content.indexOf('|')
         const kicker = pipe >= 0 ? content.slice(0, pipe).trim() : ''
         const title = (pipe >= 0 ? content.slice(pipe + 1) : content).trim()
-        blocks.push({ type: 'heading', kicker, title, numbered: true })
+        blocks.push({ type: 'heading', kicker, title, numbered: true, ...at })
       } else if (level === 1) {
-        blocks.push({ type: 'heading', kicker: '', title: content.trim(), numbered: false })
+        blocks.push({ type: 'heading', kicker: '', title: content.trim(), numbered: false, ...at })
       } else {
-        blocks.push({ type: 'subheading', title: content.trim() })
+        blocks.push({ type: 'subheading', title: content.trim(), ...at })
       }
       i += 2
       continue
@@ -197,21 +247,28 @@ export function parseMarkdown(src: string): Doc {
     if (t.type === 'paragraph_open') {
       const inline = tokens[i + 1]
       const img = inline ? imageFromInline(inline) : null
+      const at = span(t)
       if (img) {
         blocks.push({
           type: 'image',
           alt: img.alt,
           src: img.src,
-          line: t.map?.[0] ?? 0,
           occurrence: nextOccurrence(img.alt),
+          ...at,
         })
       } else {
         const text = inline?.content.trim() || ''
         if (text === '@signature') {
-          blocks.push({ type: 'signature' })
+          blocks.push({ type: 'signature', ...at })
         } else {
-          const segs = walkInline(inline?.children || null)
-          if (segs.length) blocks.push({ type: 'paragraph', segs })
+          const math = rawParagraphText(inline).trim().match(/^\$\$([\s\S]+?)\$\$$/)
+          if (math) {
+            blocks.push({ type: 'math', tex: math[1].trim(), display: true, ...at })
+          } else {
+            const segs = walkInline(inline?.children || null)
+            if (segs.length) blocks.push({ type: 'paragraph', segs, ...at })
+            else lastEnd = at.line // nothing emitted: do not advance the cursor
+          }
         }
       }
       i += 2
@@ -230,7 +287,7 @@ export function parseMarkdown(src: string): Doc {
         if (idx > 0) segs.push({ text: '\n' })
         segs.push(...p)
       })
-      blocks.push({ type: 'quoteCard', segs })
+      blocks.push({ type: 'quoteCard', segs, ...span(t, tokens[i]) })
       continue
     }
 
@@ -241,7 +298,7 @@ export function parseMarkdown(src: string): Doc {
         if (tokens[i].type === 'inline') paras.push(walkInline(tokens[i].children))
         i++
       }
-      blocks.push({ type: 'quoteBox', paras })
+      blocks.push({ type: 'quoteBox', paras, ...span(t, tokens[i], 1) })
       continue
     }
 
@@ -257,7 +314,7 @@ export function parseMarkdown(src: string): Doc {
         if (idx > 0) segs.push({ text: '\n' })
         segs.push(...p)
       })
-      blocks.push({ type: 'center', segs })
+      blocks.push({ type: 'center', segs, ...span(t, tokens[i], 1) })
       continue
     }
 
@@ -294,8 +351,8 @@ export function parseMarkdown(src: string): Doc {
         title,
         ratio,
         items,
-        line: t.map?.[0] ?? 0,
         occurrence: items.length ? items[0].occurrence : nextOccurrence(''),
+        ...span(t, tokens[i], 1),
       })
       continue
     }
@@ -308,7 +365,7 @@ export function parseMarkdown(src: string): Doc {
         if (tokens[i].type === 'inline') items.push(walkInline(tokens[i].children))
         i++
       }
-      blocks.push({ type: 'list', ordered, items })
+      blocks.push({ type: 'list', ordered, items, ...span(t, tokens[i]) })
       continue
     }
 
@@ -351,17 +408,17 @@ export function parseMarkdown(src: string): Doc {
         }
         i++
       }
-      blocks.push({ type: 'table', align, head, rows })
+      blocks.push({ type: 'table', align, head, rows, ...span(t, tokens[i]) })
       continue
     }
 
     if (t.type === 'fence') {
-      blocks.push({ type: 'code', lang: t.info.trim(), code: t.content.replace(/\n$/, '') })
+      blocks.push({ type: 'code', lang: t.info.trim(), code: t.content.replace(/\n$/, ''), ...span(t) })
       continue
     }
 
     if (t.type === 'hr') {
-      blocks.push({ type: 'hr' })
+      blocks.push({ type: 'hr', ...span(t) })
       continue
     }
   }

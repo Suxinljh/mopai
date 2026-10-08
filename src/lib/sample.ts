@@ -83,6 +83,7 @@ export const CHEATSHEET: { syntax: string; desc: string }[] = [
   { syntax: ':::carousel 4:3 标题 … :::', desc: '图片轮播；4:3/3:4/16:9/9:16/1:1 任选，上传时裁切统一' },
   { syntax: '| 表头 | 表头 |', desc: 'GFM 表格，支持逐列对齐（:--- / :---: / ---:）' },
   { syntax: '@signature', desc: '署名块（人员在设置中配置）' },
+  { syntax: '$$ … $$', desc: '数学公式，独占一段；渲染为矢量图，公众号里不糊' },
   { syntax: '<!-- 备注 -->', desc: '编辑备注，不渲染' },
   { syntax: '--- titles: - … ---', desc: 'front matter：标题候选、封面说明' },
 ]

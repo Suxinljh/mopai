@@ -1,71 +1,115 @@
 import type { Block, CarouselRatio, Doc, InlineSeg, RenderStats, SignatureConfig } from './types'
 import { baseTableBlock, BLANK, esc, type Theme } from './themes'
+import { ext, type FootnoteItem } from './theme-fallbacks'
+import { diagramOf } from './diagram'
+import { fencedRanges, isInFence } from './fences'
 
 // 盒式模块的前后空行由 pushBlock(boxed=true) 统一插入
 
-function renderSegs(theme: Theme, segs: InlineSeg[]): string {
+/**
+ * Numbers every distinct URL once, in the order the reader meets them.
+ * The same host cited twice gets one entry, which is what a reference list is for.
+ */
+function createLinkRegistry() {
+  const byUrl = new Map<string, number>()
+  const items: FootnoteItem[] = []
+  return {
+    items,
+    register(url: string, text: string): number {
+      const seen = byUrl.get(url)
+      if (seen) return seen
+      const index = items.length + 1
+      byUrl.set(url, index)
+      items.push({ index, text, url })
+      return index
+    },
+  }
+}
+
+type LinkRegistry = ReturnType<typeof createLinkRegistry>
+
+/** A `#fragment` points at nothing once the article is published on its own. */
+function isFootnotable(url: string): boolean {
+  return url.length > 0 && !url.startsWith('#')
+}
+
+function renderSegs(theme: Theme, segs: InlineSeg[], links: LinkRegistry): string {
+  const e = ext(theme)
   return segs
     .map((s) => {
       if (s.text === '\n') return '<br/>'
-      return theme.seg(s)
+      if (!s.link || !isFootnotable(s.link)) return theme.seg({ ...s, link: undefined })
+      // Drop the link styling and leave a number instead: the colour used to
+      // promise something tappable, and WeChat delivers nothing.
+      return theme.seg({ ...s, link: undefined }) + e.footnoteRef(links.register(s.link, s.text))
     })
     .join('')
 }
 
 export type ImageResolver = (src: string) => string
+export type MathResolver = (tex: string, display: boolean) => string | null
+/** mermaid source -> an uploaded `img:<key>`, or null while it is still pending. */
+export type DiagramResolver = (code: string) => string | null
 
 export function renderDoc(
   doc: Doc,
   theme: Theme,
   sig: SignatureConfig,
   resolveImg: ImageResolver = (s) => s,
-): { html: string; stats: RenderStats } {
+  resolveMath: MathResolver = () => null,
+  resolveDiagram: DiagramResolver = () => null,
+): { html: string; stats: RenderStats; blockOffsets: number[] } {
   const warnings: string[] = []
+  const links = createLinkRegistry()
   let chars = 0
   let images = 0
   let carousels = 0
   let headingNo = 0
   let imageNo = 0
 
-  const parts: string[] = []
+  // Every part remembers which block produced it. Spacer paragraphs inherit
+  // their block's index, so a boxed module maps to the whitespace above it -
+  // which is where the eye actually lands when scrolling.
+  const parts: { html: string; block: number }[] = []
 
-  const pushBlock = (html: string, boxed: boolean) => {
+  const pushBlock = (html: string, boxed: boolean, block: number) => {
     const isFirst = parts.length === 0
-    if (boxed && !isFirst) parts.push(BLANK)
-    parts.push(html)
-    if (boxed) parts.push(BLANK)
+    if (boxed && !isFirst) parts.push({ html: BLANK, block })
+    parts.push({ html, block })
+    if (boxed) parts.push({ html: BLANK, block })
   }
 
-  for (const b of doc.blocks) {
+  for (let bi = 0; bi < doc.blocks.length; bi++) {
+    const b = doc.blocks[bi]
     switch (b.type) {
       case 'paragraph': {
         chars += countSegs(b.segs)
         warnLinks(b.segs, warnings)
-        parts.push(theme.paragraph(renderSegs(theme, b.segs)))
+        parts.push({ html: theme.paragraph(renderSegs(theme, b.segs, links)), block: bi })
         break
       }
       case 'heading': {
         headingNo += b.numbered ? 1 : 0
         chars += b.title.length + b.kicker.length
-        parts.push(theme.heading(b.numbered ? headingNo : null, b.kicker, b.title))
+        parts.push({ html: theme.heading(b.numbered ? headingNo : null, b.kicker, b.title), block: bi })
         break
       }
       case 'subheading':
         chars += b.title.length
-        parts.push(theme.subheading(b.title))
+        parts.push({ html: theme.subheading(b.title), block: bi })
         break
       case 'center':
         chars += countSegs(b.segs)
         warnLinks(b.segs, warnings)
-        parts.push(theme.center(renderSegs(theme, b.segs)))
+        parts.push({ html: theme.center(renderSegs(theme, b.segs, links)), block: bi })
         break
       case 'quoteCard':
         chars += countSegs(b.segs)
-        pushBlock(theme.quoteCard(renderSegs(theme, b.segs)), true)
+        pushBlock(theme.quoteCard(renderSegs(theme, b.segs, links)), true, bi)
         break
       case 'quoteBox':
         b.paras.forEach((p) => (chars += countSegs(p)))
-        pushBlock(theme.quoteBox(b.paras.map((p) => renderSegs(theme, p))), true)
+        pushBlock(theme.quoteBox(b.paras.map((p) => renderSegs(theme, p, links))), true, bi)
         break
       case 'image': {
         images++
@@ -73,7 +117,7 @@ export function renderDoc(
         const alt = b.alt || '未命名图片'
         if (!b.alt) warnings.push(`图${imageNo} 缺少说明文字（![说明](src)）`)
         const caption = `图${imageNo} ${alt}`
-        parts.push(theme.imageBlock(b.src ? resolveImg(b.src) : '', caption))
+        parts.push({ html: theme.imageBlock(b.src ? resolveImg(b.src) : '', caption), block: bi })
         break
       }
       case 'carousel': {
@@ -85,18 +129,18 @@ export function renderDoc(
         // Carousel slides go through the same resolver as single images; skipping
         // it left `img:key` untouched and the slides rendered as broken images.
         const items = b.items.map((it) => ({ ...it, src: it.src ? resolveImg(it.src) : '' }))
-        pushBlock(theme.carousel(b.title, caption, items, b.ratio), true)
+        pushBlock(theme.carousel(b.title, caption, items, b.ratio), true, bi)
         break
       }
       case 'signature':
-        pushBlock(theme.signature(sig), true)
+        pushBlock(theme.signature(sig), true, bi)
         break
       case 'list':
         b.items.forEach((it) => {
           chars += countSegs(it)
           warnLinks(it, warnings)
         })
-        parts.push(theme.listBlock(b.ordered, b.items.map((it) => renderSegs(theme, it))))
+        parts.push({ html: theme.listBlock(b.ordered, b.items.map((it) => renderSegs(theme, it, links))), block: bi })
         break
       case 'table': {
         const cells = [...b.head, ...b.rows.flat()]
@@ -107,33 +151,107 @@ export function renderDoc(
         const tableBlock = theme.tableBlock ?? ((h, r, a) => baseTableBlock(h, r, a))
         pushBlock(
           tableBlock(
-            b.head.map((c) => renderSegs(theme, c)),
-            b.rows.map((r) => r.map((c) => renderSegs(theme, c))),
+            b.head.map((c) => renderSegs(theme, c, links)),
+            b.rows.map((r) => r.map((c) => renderSegs(theme, c, links))),
             b.align,
           ),
           true,
+          bi,
         )
         break
       }
-      case 'code':
-        pushBlock(theme.codeBlock(b.lang, b.code), true)
+      case 'math': {
+        chars += b.tex.length
+        const svg = resolveMath(b.tex, b.display)
+        // The pending state must emit the same shape as the rendered one, or the
+        // block mapping would shift the moment MathJax finishes and the preview
+        // would jump under the reader's thumb.
+        const inner =
+          svg ??
+          `<p style="margin:0;font-family:Menlo,Consolas,monospace;font-size:12px;line-height:1.6;color:#A57427;text-align:center;text-indent:0;word-break:break-all;"><span leaf="">${esc(b.tex)}</span></p>`
+        pushBlock(ext(theme).math(b.tex, inner, b.display), true, bi)
         break
+      }
+      case 'code': {
+        const diagram = diagramOf(b.lang)
+        const ref = diagram ? resolveDiagram(b.code) : null
+        if (diagram && ref) {
+          // From here on it is an ordinary figure: same numbering, same block,
+          // same place in the materials list as an uploaded photograph.
+          images++
+          imageNo++
+          if (!diagram.title) warnings.push(`图${imageNo} 是图表，可在 \`\`\`mermaid 后面加一句说明`)
+          const caption = `图${imageNo} ${diagram.title || '示意图'}`
+          parts.push({ html: theme.imageBlock(resolveImg(ref), caption), block: bi })
+        } else {
+          // Still rasterizing, invalid syntax, or no account to upload with. The
+          // source is the useful thing to show in all three cases.
+          pushBlock(theme.codeBlock(diagram ? 'mermaid' : b.lang, b.code), true, bi)
+        }
+        break
+      }
       case 'hr':
-        parts.push(theme.hr())
+        parts.push({ html: theme.hr(), block: bi })
         break
     }
   }
 
+  // The reference list aggregates links from the whole article, so it can only be
+  // emitted once the walk is done. Block -1: it has no source line of its own and
+  // must stay out of the scroll-sync mapping.
+  if (links.items.length) pushBlock(ext(theme).footnotes(links.items), true, -1)
+
   // 收尾：连续空行去重、去掉末尾多余空行
-  const cleaned: string[] = []
+  const cleaned: { html: string; block: number }[] = []
   for (const p of parts) {
-    if (p === BLANK && cleaned[cleaned.length - 1] === BLANK) continue
+    if (p.html === BLANK && cleaned[cleaned.length - 1]?.html === BLANK) continue
     cleaned.push(p)
   }
-  while (cleaned.length && cleaned[cleaned.length - 1] === BLANK) cleaned.pop()
+  while (cleaned.length && cleaned[cleaned.length - 1].html === BLANK) cleaned.pop()
 
-  const html = theme.root(cleaned.join('\n'))
-  return { html, stats: { chars, images, carousels, warnings: [...new Set(warnings)] } }
+  // Offsets are computed after dedup so each one is a real child index of the
+  // root <section>, ready to be matched against the preview DOM. A part is not
+  // necessarily one element - theme.carousel returns a heading, a slide strip
+  // and a caption as three siblings - so the running index advances by however
+  // many top-level elements the part actually contributes.
+  const blockOffsets = new Array<number>(doc.blocks.length).fill(-1)
+  let childIndex = 0
+  for (const p of cleaned) {
+    if (p.block >= 0 && blockOffsets[p.block] === -1) blockOffsets[p.block] = childIndex
+    childIndex += countRootElements(p.html)
+  }
+
+  const html = theme.root(cleaned.map((p) => p.html).join('\n'))
+  return { html, stats: { chars, images, carousels, warnings: [...new Set(warnings)] }, blockOffsets }
+}
+
+const VOID_TAGS = new Set([
+  'img', 'br', 'hr', 'input', 'meta', 'link', 'source', 'area', 'base', 'col', 'embed', 'param', 'track', 'wbr',
+])
+
+/**
+ * How many sibling elements sit at the top level of an HTML fragment.
+ *
+ * Themes build HTML by string concatenation, so the renderer cannot know from
+ * the return type whether it got one element or three. This is the only thing
+ * standing between "block i" and "the element block i starts at" in the preview.
+ */
+export function countRootElements(html: string): number {
+  let depth = 0
+  let roots = 0
+  const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/?)>/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html))) {
+    if (m[1] === '/') {
+      depth--
+      continue
+    }
+    if (depth === 0) roots++
+    // Void and self-closing tags never open a level.
+    if (m[3] === '/' || VOID_TAGS.has(m[2].toLowerCase())) continue
+    depth++
+  }
+  return roots
 }
 
 function countSegs(segs: InlineSeg[]): number {
@@ -141,7 +259,9 @@ function countSegs(segs: InlineSeg[]): number {
 }
 
 function warnLinks(segs: InlineSeg[], warnings: string[]) {
-  if (segs.some((s) => s.link)) warnings.push('检测到链接：公众号正文外链不可点击，已渲染为普通文字')
+  if (segs.some((s) => s.link && isFootnotable(s.link))) {
+    warnings.push('检测到链接：公众号正文外链不可点击，已编号并汇总到文末「参考链接」')
+  }
 }
 
 // 素材清单：逐张图片一行（轮播拆成单张），供后台插图对照与上传回填
@@ -166,11 +286,18 @@ export interface MaterialItem {
   carouselOrdinal?: number
 }
 
-export function collectMaterials(doc: Doc): MaterialItem[] {
+export function collectMaterials(doc: Doc, resolveDiagram: DiagramResolver = () => null): MaterialItem[] {
   const out: MaterialItem[] = []
   let imageNo = 0
   let carouselNo = 0
   for (const b of doc.blocks) {
+    if (b.type === 'code') {
+      // A rendered diagram takes a figure number in the article but has no
+      // placeholder to fill here, so it is counted and not listed. Counting it
+      // is what keeps 图N in this panel agreeing with 图N in the article.
+      if (diagramOf(b.lang) && resolveDiagram(b.code)) imageNo++
+      continue
+    }
     if (b.type === 'image') {
       imageNo++
       out.push({
@@ -227,10 +354,15 @@ interface ImageSpan {
 
 function findImageSpan(content: string, occurrence: number): ImageSpan | null {
   if (occurrence < 1) return null
+  const fences = fencedRanges(content)
   const re = /!\[([^\]]*)\]\(/g
   let m: RegExpExecArray | null
   let seen = 0
   while ((m = re.exec(content))) {
+    // Must match parse.ts's scanImageOccurrences exactly: the occurrence number
+    // comes from there, so skipping a different set of matches here would send
+    // an uploaded key to the wrong image.
+    if (isInFence(fences, m.index)) continue
     seen++
     if (seen !== occurrence) continue
     const start = m.index

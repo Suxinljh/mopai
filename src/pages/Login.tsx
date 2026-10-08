@@ -1,19 +1,24 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { trpc } from '@/providers/trpc'
 import { APP_NAME, APP_BYLINE } from '@/lib/brand'
 import { YoruMark } from '@/components/YoruMark'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 export default function Login() {
   const [accessKey, setAccessKey] = useState('')
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const utils = trpc.useUtils()
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async (res) => {
       if (res.success) {
         await utils.auth.me.invalidate()
-        navigate('/')
+        // Sent here from an agent's ?doc= link: go back to that article rather
+        // than dropping her on whichever one she last happened to look at.
+        const doc = searchParams.get('doc')
+        navigate(doc ? `/?doc=${encodeURIComponent(doc)}` : '/')
       }
     },
   })
@@ -22,12 +27,15 @@ export default function Login() {
 
   return (
     <div className="ya-page flex min-h-screen items-center justify-center">
+      <div className="fixed right-4 top-4 z-10">
+        <ThemeToggle />
+      </div>
       <div className="ya-card w-full max-w-sm p-6">
         <div className="mb-5 flex flex-col items-center gap-1 text-center">
           <span className="mb-2.5">
             <YoruMark height={30} />
           </span>
-          <span className="text-[19px] font-bold tracking-wide text-[#0E1525]">{APP_NAME}</span>
+          <span className="text-[19px] font-bold tracking-wide text-ink-1">{APP_NAME}</span>
           <span className="ya-eyebrow">{APP_BYLINE}</span>
         </div>
         <form
@@ -52,9 +60,9 @@ export default function Login() {
           </button>
         </form>
         {rejected && (
-          <p className="mt-3 text-center text-[12px] text-[#A23F3F]">{loginMutation.data?.message}</p>
+          <p className="mt-3 text-center text-[12px] text-bad-700">{loginMutation.data?.message}</p>
         )}
-        <p className="mt-4 text-center text-[12px] leading-relaxed text-[#6B7793]">
+        <p className="mt-4 text-center text-[12px] leading-relaxed text-ink-3">
           口令只用来打开站长自己的云端草稿箱；排版、上传图片、复制和导出都不用登录。
         </p>
       </div>

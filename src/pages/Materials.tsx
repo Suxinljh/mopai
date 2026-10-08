@@ -4,6 +4,8 @@ import { Toaster, toast } from 'sonner'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import { loadDocs } from '@/lib/store'
+import { ThemeToggle } from '@/components/ThemeToggle'
+import { loadDiagramCache } from '@/lib/diagram'
 
 function formatBytes(n: number): string {
   if (!n) return '0 B'
@@ -28,6 +30,9 @@ function localDraftKeys(): string[] {
     for (const d of loadDocs().docs) {
       for (const m of d.content.matchAll(/img:([^\s)\]]+)/g)) out.add(m[1])
     }
+    // A diagram's PNG is referenced only here: the fence in the document holds
+    // mermaid source, so the server-side scan of 稿件 content cannot see it.
+    for (const ref of loadDiagramCache().values()) out.add(ref.replace(/^img:/, ''))
   } catch {
     // localStorage 不可用时，孤儿判定退回只看云端稿件
   }
@@ -85,7 +90,7 @@ export default function Materials() {
     : 0
 
   if (authLoading) {
-    return <Shell onBack={() => navigate('/')}><p className="text-[13px] text-[#9A9A9A]">读取中…</p></Shell>
+    return <Shell onBack={() => navigate('/')}><p className="text-[13px] text-ink-4">读取中…</p></Shell>
   }
 
   return (
@@ -95,37 +100,37 @@ export default function Materials() {
         {isAuthenticated ? (
           <section className="ya-well p-5">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-[14px] font-semibold text-[#0E1525]">存储用量</h2>
-              <span className="text-[12px] text-[#6B7793]">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
+              <h2 className="text-[14px] font-semibold text-ink-1">存储用量</h2>
+              <span className="text-[12px] text-ink-3">最近一张 {formatDate(stats.data?.oldestAt ?? null)} 之前</span>
             </div>
             <div className="mt-3 flex items-end gap-4">
               <div>
-                <p className="text-[26px] font-bold tabular-nums leading-none text-[#0E1525]" style={{ fontFamily: 'var(--font-mono)' }}>
+                <p className="text-[26px] font-bold tabular-nums leading-none text-ink-1" style={{ fontFamily: 'var(--font-mono)' }}>
                   {formatBytes(stats.data?.totalBytes ?? 0)}
                 </p>
-                <p className="mt-1 text-[12px] text-[#6B7793]">
+                <p className="mt-1 text-[12px] text-ink-3">
                   共 {stats.data?.count ?? 0} 张 · 上限 {formatBytes(stats.data?.quotaBytes ?? 0)}
                 </p>
               </div>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#DEE3EC]" style={{ boxShadow: 'var(--shadow-inset)' }}>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" style={{ boxShadow: 'var(--shadow-inset)' }}>
               <div
                 className="h-full rounded-full transition-all"
                 style={{ width: `${Math.max(usagePct, stats.data?.count ? 1.5 : 0)}%`, background: usagePct > 85 ? 'var(--error-500)' : 'var(--primary-500)' }}
               />
             </div>
-            <p className="mt-2 text-[11px] text-[#6B7793]">
+            <p className="mt-2 text-[11px] text-ink-3">
               图片存在 Cloudflare R2，按整个桶计量。这里显示的是本工具自己记的账。
             </p>
           </section>
         ) : (
           <section className="ya-well p-5">
-            <h2 className="text-[14px] font-semibold text-[#0E1525]">这台浏览器上传的图</h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-[#394560]">
+            <h2 className="text-[14px] font-semibold text-ink-1">这台浏览器上传的图</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
               共 {stats.data?.count ?? 0} 张 · {formatBytes(stats.data?.totalBytes ?? 0)}。
               上传不用登录，图片按浏览器归属；换设备或清掉站点数据就看不到了。
             </p>
-            <p className="mt-2 text-[11px] leading-relaxed text-[#6B7793]">
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
               每 24 小时最多 {stats.data?.dailyImages ?? 0} 张 / {formatBytes(stats.data?.dailyBytes ?? 0)}——
               图床是共享的免费额度，用完明天自动恢复。
             </p>
@@ -136,8 +141,8 @@ export default function Materials() {
         <section className="ya-well p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-[14px] font-semibold text-[#0E1525]">没在用的旧图</h2>
-              <p className="mt-1 text-[12px] leading-relaxed text-[#6B7793]">
+              <h2 className="text-[14px] font-semibold text-ink-1">没在用的旧图</h2>
+              <p className="mt-1 text-[12px] leading-relaxed text-ink-3">
                 已经存进云端稿件里的图不在此列。删掉后公众号里已粘贴的文章不受影响——微信发布时已经把图转存到它自己的服务器了。
               </p>
             </div>
@@ -154,9 +159,9 @@ export default function Materials() {
           </div>
 
           {orphans.isLoading ? (
-            <p className="mt-4 text-[13px] text-[#6B7793]">读取中…</p>
+            <p className="mt-4 text-[13px] text-ink-3">读取中…</p>
           ) : orphanKeys.length === 0 ? (
-            <p className="mt-4 rounded-xl bg-[#2BA672]/10 p-3 text-[13px] text-[#1F7E58]">
+            <p className="mt-4 rounded-xl bg-ok-100 p-3 text-[13px] text-ok-700">
               干净，没有多余的图。
             </p>
           ) : (
@@ -164,7 +169,7 @@ export default function Materials() {
               <div className="mt-3 flex items-center gap-3">
                 <button
                   onClick={() => setSelected(new Set(orphanKeys))}
-                  className="ya-link-btn !text-[12px] !text-[#4F6CE8]"
+                  className="ya-link-btn !text-[12px] !text-brand"
                 >
                   全选 {orphanKeys.length} 张
                 </button>
@@ -175,7 +180,7 @@ export default function Materials() {
                   清空选择
                 </button>
               </div>
-              <ul className="mt-2 divide-y divide-black/6">
+              <ul className="mt-2 divide-y divide-line-2">
                 {(orphans.data ?? []).map((o) => (
                   <li key={o.key} className="flex items-center gap-3 py-2">
                     <input
@@ -189,11 +194,11 @@ export default function Materials() {
                           return next
                         })
                       }}
-                      className="h-3.5 w-3.5 shrink-0 accent-[#4F6CE8]"
+                      className="h-3.5 w-3.5 shrink-0 accent-brand"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] text-[#0E1525]" title={o.key}>{o.name || o.key}</p>
-                      <p className="text-[11px] text-[#6B7793]">
+                      <p className="truncate text-[12px] text-ink-1" title={o.key}>{o.name || o.key}</p>
+                      <p className="text-[11px] text-ink-3">
                         {formatBytes(o.size)} · {formatDate(o.createdAt.getTime())}
                       </p>
                     </div>
@@ -206,13 +211,13 @@ export default function Materials() {
 
         {/* 全部图片 */}
         <section className="ya-well p-5">
-          <h2 className="text-[14px] font-semibold text-[#0E1525]">全部图片 <span className="font-normal text-[#6B7793]">（最近 200 张）</span></h2>
+          <h2 className="text-[14px] font-semibold text-ink-1">全部图片 <span className="font-normal text-ink-3">（最近 200 张）</span></h2>
           {files.isLoading ? (
-            <p className="mt-3 text-[13px] text-[#6B7793]">读取中…</p>
+            <p className="mt-3 text-[13px] text-ink-3">读取中…</p>
           ) : (files.data ?? []).length === 0 ? (
-            <p className="mt-3 text-[13px] text-[#6B7793]">还没有上传过图片。</p>
+            <p className="mt-3 text-[13px] text-ink-3">还没有上传过图片。</p>
           ) : (
-            <ul className="mt-2 divide-y divide-black/6">
+            <ul className="mt-2 divide-y divide-line-2">
               {(files.data ?? []).map((f) => {
                 const inUse = !orphanKeys.includes(f.key)
                 return (
@@ -230,14 +235,14 @@ export default function Materials() {
                     />
                     <span
                       className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] ${
-                        inUse ? 'bg-[#2BA672]/10 text-[#1F7E58]' : 'bg-[#D89A3A]/12 text-[#A57427]'
+                        inUse ? 'bg-ok-100 text-ok-700' : 'bg-warn-100 text-warn-700'
                       }`}
                     >
                       {inUse ? '在用' : '没在用'}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] text-[#0E1525]" title={f.key}>{f.name || f.key}</p>
-                      <p className="text-[11px] text-[#6B7793]">
+                      <p className="truncate text-[12px] text-ink-1" title={f.key}>{f.name || f.key}</p>
+                      <p className="text-[11px] text-ink-3">
                         {formatBytes(f.size)} · {formatDate(f.createdAt.getTime())}
                       </p>
                     </div>
@@ -273,8 +278,11 @@ function Shell({ children, onBack }: { children: React.ReactNode; onBack: () => 
           ← 回到编辑器
         </button>
         <div className="flex items-baseline gap-2">
-          <span className="text-[15px] font-bold tracking-wide text-[#0E1525]">素材库</span>
+          <span className="text-[15px] font-bold tracking-wide text-ink-1">素材库</span>
           <span className="ya-eyebrow">materials</span>
+        </div>
+        <div className="ml-auto">
+          <ThemeToggle />
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">{children}</main>

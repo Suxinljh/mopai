@@ -127,7 +127,7 @@ Markdown → 语义 AST（src/lib/parse.ts）→ 主题模板函数（src/lib/th
 | 进程 | `mopai.service`（systemd，内存上限 384M，实测吃 ~35MB）+ `cloudflared-mopai.service` |
 | 入口 | Cloudflare Tunnel → `wechat.yoru-and-akari.dev`，tunnel id `1c05edf4-f1f1-4156-9aa2-8a1ddca0fa14`（ingress 在服务器 `/etc/cloudflared/mopai.yml`） |
 | 门禁 | **站点公开，没有 Cloudflare Access**（2026-10-08 撤掉，之前是邮箱验证只放行站长）。撤的方式：本机的 CF token 只读写不动，于是借一个已登录 dashboard 的浏览器会话，走它的同源代理 `dash.cloudflare.com/api/v4/...` 删掉了两个 Access 应用；同一会话把本站并入了 zone 上那条高威胁分数 challenge 规则（现在 `http.host in {"app..." "wechat..."}`）。`ACCESS_KEY` 只决定谁能用云端草稿箱；排版、上传、复制、导出都不用登录 |
-| 图片公网读 | 站点公开之后 `/api/img/*` 自然是公网可读（微信抓图必须匿名可达）。以前那个 bypass Access 应用已随之删除 |
+| 图片公网读 | 站点公开之后 `/api/img/*` 自然是公网可读（微信抓图必须匿名可达）。以前那个 bypass Access 应用已随之删除。若将来把门禁关回去，必须同时建一个 bypass 应用放行 `/api/img/*`（`cf-create-access.sh` 里已有这段，路径最具体者优先）；同理若放行 `/api/agent/*`，**绝不能连带放行 `/api/trpc/*`**——那里有 `auth.login` |
 | 防滥用 | 应用层四道（IP 突发限流 / 访客 24h 额度 / 匿名总量封顶 / 字节头判类型）+ zone 上已有的 WAF 规则。细节与「刻意没做的三件事」见 `app/README.md`「公开之后靠什么挡滥用」 |
 | 图片存储 | Worker `mopai-images` → R2 `mopai-assets`；Worker 持有 R2 binding，**服务器上不存在任何 S3 凭证** |
 | 数据 | SQLite，`/opt/mopai/app/data/mopai.db` |

@@ -3,6 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
+import { agentRouter } from "./agent-router";
 import { createContext } from "./context";
 import { storage } from "./lib/storage";
 import { env } from "./lib/env";
@@ -23,6 +24,12 @@ app.get("/api/img/:key", async (c) => {
     return c.json({ error: "image not found" }, 404);
   }
 });
+
+// The agent door: REST + Bearer token, separate from the browser's tRPC session.
+// If this app is ever put behind Cloudflare Access, this is the only prefix that
+// may get a service-token bypass — /api/trpc/* carries auth.login and must stay
+// behind the perimeter.
+app.route("/api/agent", agentRouter);
 
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({

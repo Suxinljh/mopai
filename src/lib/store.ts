@@ -8,11 +8,17 @@ export interface DocRecord {
   updatedAt: number
   /** When this article was last put into 草稿箱; null = never explicitly saved. */
   savedAt: number | null
+  /** In the recycle bin since this timestamp; null = live. */
+  deletedAt: number | null
+  /** `agent:<token name>` when an agent pushed it through /api/agent; null = written here. */
+  source?: string | null
 }
 
 export interface AppSettings {
   themeId: string
   sig: SignatureConfig
+  /** Editor and preview scroll together. Defaults to on; persisted per browser. */
+  syncScroll: boolean
 }
 
 const DOCS_KEY = 'mopai.docs.v1'
@@ -30,8 +36,13 @@ export function loadDocs(): { docs: DocRecord[]; activeId: string } {
     if (raw) {
       const docs = JSON.parse(raw) as DocRecord[]
       if (Array.isArray(docs) && docs.length) {
-        // Tolerate records written before savedAt existed.
-        const normalised = docs.map((d) => ({ ...d, savedAt: d.savedAt ?? null }))
+        // Tolerate records written before savedAt / deletedAt / source existed.
+        const normalised = docs.map((d) => ({
+          ...d,
+          savedAt: d.savedAt ?? null,
+          deletedAt: d.deletedAt ?? null,
+          source: d.source ?? null,
+        }))
         return { docs: normalised, activeId: normalised.some((d) => d.id === activeId) ? activeId : normalised[0].id }
       }
     }
@@ -44,6 +55,7 @@ export function loadDocs(): { docs: DocRecord[]; activeId: string } {
     content: SAMPLE_DOC,
     updatedAt: Date.now(),
     savedAt: null,
+    deletedAt: null,
   }
   return { docs: [first], activeId: first.id }
 }
@@ -75,7 +87,11 @@ export function saveActiveId(id: string) {
 }
 
 export function loadSettings(): AppSettings {
-  const def: AppSettings = { themeId: 'golden', sig: { layout: 'Yoru', proof: 'Yoru', review: 'Yoru' } }
+  const def: AppSettings = {
+    themeId: 'golden',
+    sig: { layout: 'Yoru', proof: 'Yoru', review: 'Yoru' },
+    syncScroll: true,
+  }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (raw) return { ...def, ...(JSON.parse(raw) as AppSettings) }
@@ -100,5 +116,17 @@ export function createDoc(): DocRecord {
     content: '---\ntitles:\n  - \n---\n\n',
     updatedAt: Date.now(),
     savedAt: null,
+    deletedAt: null,
+  }
+}
+
+export function createSampleDoc(): DocRecord {
+  return {
+    id: uid(),
+    name: '示例稿 · 语法速览',
+    content: SAMPLE_DOC,
+    updatedAt: Date.now(),
+    savedAt: null,
+    deletedAt: null,
   }
 }

@@ -23,8 +23,9 @@ function resolveSessionSecret(): string {
 export const env = {
   isProduction: process.env.NODE_ENV === "production",
 
-  // Single-owner access key. Cloudflare Access guards the site perimeter; this
-  // key backs the in-app session that gates image uploads.
+  // Single-owner access key. The site itself is public; this key backs the
+  // in-app session that guards the cloud draft box. Anonymous visitors can
+  // still upload images, bounded by the ceilings below.
   accessKey: process.env.ACCESS_KEY ?? "mopai-dev-only-access-key",
   sessionSecret: resolveSessionSecret(),
 
@@ -44,4 +45,10 @@ export const env = {
   anonDailyImages: Number(process.env.ANON_DAILY_IMAGES || 30),
   anonDailyBytes: Number(process.env.ANON_DAILY_BYTES || 100 * 1024 * 1024),
   anonTotalBytes: Number(process.env.ANON_TOTAL_BYTES || 1536 * 1024 * 1024),
+
+  // Absolute origin for links handed to agents (`editorUrl`). Optional: when
+  // unset the agent API derives it from the incoming request, which is already
+  // the public origin behind the Cloudflare Tunnel. Set it only if the app is
+  // reached through something that rewrites Host.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? "").replace(/\/+$/, ""),
 };

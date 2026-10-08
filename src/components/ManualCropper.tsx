@@ -79,7 +79,7 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
           <DialogDescription className="text-[12px] leading-relaxed">
             {ratio ? (
               <>
-                这个轮播统一 <strong className="text-[#0E1525]">{ratio}</strong> 比例，所以裁切框锁成该比例——
+                这个轮播统一 <strong className="text-ink-1">{ratio}</strong> 比例，所以裁切框锁成该比例——
                 拖动图片决定留下哪一块，滚轮或下面的滑杆缩放。
               </>
             ) : (
@@ -89,11 +89,11 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
         </DialogHeader>
 
         <div className="mt-1">
-          <p className="mb-2 text-[11px] text-[#6B7793]" style={{ fontFamily: 'var(--font-mono)' }}>
+          <p className="mb-2 text-[11px] text-ink-3" style={{ fontFamily: 'var(--font-mono)' }}>
             {label ? `${label} · ` : ''}{alt || '未命名'}
           </p>
 
-          <div className="relative h-[min(380px,52vh)] w-full overflow-hidden rounded-xl bg-[#0B1020]">
+          <div className="relative h-[min(380px,52vh)] w-full overflow-hidden rounded-xl bg-surface-sunken">
             {src ? (
               <Cropper
                 image={src}
@@ -108,12 +108,12 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
                 objectFit="contain"
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-[12px] text-[#6B7691]">读取图片中…</div>
+              <div className="flex h-full items-center justify-center text-[12px] text-ink-3">读取图片中…</div>
             )}
           </div>
 
           <div className="mt-3 flex items-center gap-3">
-            <span className="shrink-0 text-[11px] text-[#6B7793]">缩放</span>
+            <span className="shrink-0 text-[11px] text-ink-3">缩放</span>
             <input
               type="range"
               min={1}
@@ -121,9 +121,9 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
               step={0.01}
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
-              className="h-1 w-full accent-[#4F6CE8]"
+              className="h-1 w-full accent-brand"
             />
-            <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-[#6B7793]">
+            <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-ink-3">
               {zoom.toFixed(1)}×
             </span>
             <button
@@ -139,15 +139,15 @@ export default function ManualCropper({ open, file, label, alt, ratio, busy, onC
           </div>
 
           {area && (
-            <p className="mt-2 text-[11px] text-[#6B7793]">
+            <p className="mt-2 text-[11px] text-ink-3">
               取 {Math.round(area.width)}×{Math.round(area.height)} 像素
             </p>
           )}
-          {error && <p className="mt-2 text-[11px] text-[#A23F3F]">{error}</p>}
+          {error && <p className="mt-2 text-[11px] text-bad-700">{error}</p>}
         </div>
 
         {/* Sticky so the actions stay reachable when the dialog scrolls on a short window. */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 mt-3 flex justify-end gap-2 border-t border-black/6 bg-[#F6F8FC] px-6 py-3">
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-3 flex justify-end gap-2 border-t border-line-2 bg-surface-elevated px-6 py-3">
           <button
             type="button"
             onClick={onCancel}

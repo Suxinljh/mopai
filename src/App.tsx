@@ -4,6 +4,7 @@ import Login from '@/pages/Login'
 import Materials from '@/pages/Materials'
 import Drafts from '@/pages/Drafts'
 import Themes from '@/pages/Themes'
+import References from '@/pages/References'
 import NotFound from '@/pages/NotFound'
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
       <Route path="/materials" element={<Materials />} />
       <Route path="/drafts" element={<Drafts />} />
       <Route path="/themes" element={<Themes />} />
+      <Route path="/references" element={<References />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

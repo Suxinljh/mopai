@@ -17,6 +17,7 @@ import { loadSettings, saveSettings } from '@/lib/store'
 import { THEME_PREVIEW_DOC } from '@/lib/sample'
 import { YoruMark } from '@/components/YoruMark'
 import { APP_NAME, APP_BYLINE } from '@/lib/brand'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 // 模板库：全部主题渲染同一份 THEME_PREVIEW_DOC，视觉差异才可比。
 // 主题数量上百，所以预览 DOM 只在卡片滚进视口附近时才注入，
@@ -104,7 +105,7 @@ function FilterRow<T extends string | number>({
               key={String(opt)}
               onClick={() => onToggle(opt)}
               className={`rounded-full px-2.5 py-1 text-[11px] transition-all ${
-                on ? 'ya-selected font-semibold text-[#0E1525]' : 'text-[#6B7793] hover:text-[#0E1525]'
+                on ? 'ya-selected font-semibold text-ink-1' : 'text-ink-3 hover:text-ink-1'
               }`}
               style={on ? undefined : { boxShadow: 'var(--shadow-inset)' }}
             >
@@ -123,7 +124,7 @@ function Tag({ children, tone = 'muted' }: { children: React.ReactNode; tone?: '
       className="rounded-md px-1.5 py-0.5 text-[10px] leading-none"
       style={{
         background: tone === 'accent' ? 'var(--primary-100)' : 'rgba(14,21,37,0.05)',
-        color: tone === 'accent' ? 'var(--primary-700)' : '#6B7793',
+        color: tone === 'accent' ? 'var(--primary-700)' : 'var(--ink-3)',
       }}
     >
       {children}
@@ -134,16 +135,16 @@ function Tag({ children, tone = 'muted' }: { children: React.ReactNode; tone?: '
 function OriginDetails({ theme }: { theme: Theme }) {
   const o = theme.meta.origin
   return (
-    <div className="ya-well flex flex-col gap-1.5 rounded-xl p-3 text-[11px] leading-relaxed text-[#6B7793]">
+    <div className="ya-well flex flex-col gap-1.5 rounded-xl p-3 text-[11px] leading-relaxed text-ink-3">
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <span>
-          来源项目 <span className="text-[#394560]">{o.project}</span>
+          来源项目 <span className="text-ink-2">{o.project}</span>
         </span>
         <span>
-          原作者 <span className="text-[#394560]">{o.author}</span>
+          原作者 <span className="text-ink-2">{o.author}</span>
         </span>
         <span>
-          License <span className="text-[#394560]">{o.license}</span>
+          License <span className="text-ink-2">{o.license}</span>
         </span>
       </div>
       {o.repo && (
@@ -151,22 +152,22 @@ function OriginDetails({ theme }: { theme: Theme }) {
           href={o.repo}
           target="_blank"
           rel="noreferrer noopener"
-          className="break-all underline decoration-dotted underline-offset-2 hover:text-[#0E1525]"
+          className="break-all underline decoration-dotted underline-offset-2 hover:text-ink-1"
         >
           {o.repo}
         </a>
       )}
       {o.upstream && (
         <span>
-          上游 / lineage <span className="text-[#394560]">{o.upstream}</span>
+          上游 / lineage <span className="text-ink-2">{o.upstream}</span>
         </span>
       )}
       {o.licenseFile && (
         <span>
-          许可证留存 <span style={{ fontFamily: 'var(--font-mono)' }} className="text-[#394560]">{o.licenseFile}</span>
+          许可证留存 <span style={{ fontFamily: 'var(--font-mono)' }} className="text-ink-2">{o.licenseFile}</span>
         </span>
       )}
-      <span className="text-[#394560]">{o.attribution}</span>
+      <span className="text-ink-2">{o.attribution}</span>
       {o.adapted && <span>移植改动：{o.adapted}</span>}
     </div>
   )
@@ -194,7 +195,7 @@ function ThemeCard({
         <span className="ya-dot mt-1.5 shrink-0" style={{ background: theme.ui.accent }} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="truncate text-[14px] font-semibold text-[#0E1525]">{theme.name}</span>
+            <span className="truncate text-[14px] font-semibold text-ink-1">{theme.name}</span>
             {active && (
               <span
                 className="ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
@@ -205,7 +206,7 @@ function ThemeCard({
             )}
           </div>
           {theme.desc !== theme.name && (
-            <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-[#6B7793]">{theme.desc}</p>
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-ink-3">{theme.desc}</p>
           )}
         </div>
       </div>
@@ -220,7 +221,7 @@ function ThemeCard({
         <Tag>{theme.meta.color}</Tag>
       </div>
 
-      <div className="flex items-center gap-1.5 px-0.5 text-[10px] text-[#6B7793]">
+      <div className="flex items-center gap-1.5 px-0.5 text-[10px] text-ink-3">
         <span className="truncate">{o.project}</span>
         <span className="shrink-0 opacity-50">·</span>
         <span className="shrink-0">{o.license}</span>
@@ -229,7 +230,7 @@ function ThemeCard({
             href={o.repo}
             target="_blank"
             rel="noreferrer noopener"
-            className="ml-auto shrink-0 underline decoration-dotted underline-offset-2 hover:text-[#0E1525]"
+            className="ml-auto shrink-0 underline decoration-dotted underline-offset-2 hover:text-ink-1"
           >
             原项目 ↗
           </a>
@@ -327,21 +328,24 @@ export default function Themes() {
   }
 
   return (
-    <div className="ya-page min-h-screen text-[#0E1525]">
+    <div className="ya-page min-h-screen text-ink-1">
       <header className="ya-glass sticky top-0 z-10 flex h-14 items-center gap-3 px-4">
         <button onClick={() => navigate('/')} className="ya-btn ya-btn-secondary ya-btn-sm !h-8">
           ← 回到编辑器
         </button>
         <div className="flex min-w-0 items-center gap-2.5">
           <YoruMark height={15} />
-          <span className="text-[15px] font-bold tracking-wide text-[#0E1525]">模板库</span>
+          <span className="text-[15px] font-bold tracking-wide text-ink-1">模板库</span>
           <span className="ya-eyebrow truncate">
             {APP_NAME} · {APP_BYLINE}
           </span>
         </div>
-        <span className="ya-eyebrow ml-auto shrink-0 tabular-nums">
-          {filtered.length}/{THEMES.length}
-        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <span className="ya-eyebrow tabular-nums">
+            {filtered.length}/{THEMES.length}
+          </span>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-5">
@@ -382,13 +386,13 @@ export default function Themes() {
           />
         </div>
 
-        <p className="mb-4 px-0.5 text-[12px] leading-relaxed text-[#6B7793]">
+        <p className="mb-4 px-0.5 text-[12px] leading-relaxed text-ink-3">
           全部模板渲染同一份样例，覆盖标题、正文、强调、引用、列表、表格、代码、图片与图注、轮播和署名。
           每套模板都标注了来源项目、原作者与许可证；点「来源」可看完整的署名与 lineage。
         </p>
 
         {filtered.length === 0 ? (
-          <div className="ya-well rounded-2xl p-10 text-center text-[13px] text-[#6B7793]">
+          <div className="ya-well rounded-2xl p-10 text-center text-[13px] text-ink-3">
             没有符合当前筛选条件的模板，试试放宽一点。
           </div>
         ) : (
@@ -405,7 +409,7 @@ export default function Themes() {
           </div>
         )}
 
-        <p className="mt-8 text-center text-[11px] leading-relaxed text-[#6B7793]">
+        <p className="mt-8 text-center text-[11px] leading-relaxed text-ink-3">
           主题库来自多个开源项目，各套模板的授权与署名以卡片内标注为准，许可证原文留存在仓库的 licenses/ 目录。
         </p>
       </main>

@@ -52,8 +52,8 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
               </>
             ) : locked ? (
               <>
-                这个轮播已经定死 <strong className="text-[#0E1525]">{ratio}</strong>。轮播内所有图片必须同比例，
-                换比例请先在正文里改 <code className="rounded bg-black/5 px-1">:::carousel</code> 那一行。
+                这个轮播已经定死 <strong className="text-ink-1">{ratio}</strong>。轮播内所有图片必须同比例，
+                换比例请先在正文里改 <code className="rounded bg-surface-sunken px-1">:::carousel</code> 那一行。
               </>
             ) : (
               <>
@@ -65,7 +65,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
         </DialogHeader>
 
         <div className="mt-1">
-          <p className="mb-2 text-[11px] text-[#6B7793]" style={{ fontFamily: 'var(--font-mono)' }}>
+          <p className="mb-2 text-[11px] text-ink-3" style={{ fontFamily: 'var(--font-mono)' }}>
             {label} · {alt || '未命名'}
           </p>
 
@@ -74,14 +74,14 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
               type="button"
               onClick={() => setRatio(null)}
               className={`mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
-                ratio === null ? 'ya-selected' : 'bg-[#DEE3EC] hover:bg-[#E4E9F1]'
+                ratio === null ? 'ya-selected' : 'bg-surface-sunken hover:bg-surface-surface'
               }`}
               style={ratio === null ? undefined : { boxShadow: 'var(--shadow-inset)' }}
             >
-              <span className={`text-[12px] ${ratio === null ? 'font-semibold text-[#4F6CE8]' : 'text-[#394560]'}`}>
+              <span className={`text-[12px] ${ratio === null ? 'font-semibold text-brand' : 'text-ink-2'}`}>
                 保持原图比例，不裁
               </span>
-              <span className="ml-auto text-[11px] text-[#6B7793]">推荐</span>
+              <span className="ml-auto text-[11px] text-ink-3">推荐</span>
             </button>
           )}
 
@@ -97,15 +97,15 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
                   onClick={() => setRatio(r)}
                   title={`${r} → 裁成 ${f.cropWidth}×${f.cropHeight}`}
                   className={`flex flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-all ${
-                    active ? 'ya-selected' : 'bg-[#DEE3EC] hover:bg-[#E4E9F1]'
+                    active ? 'ya-selected' : 'bg-surface-sunken hover:bg-surface-surface'
                   } ${locked && !active ? 'opacity-40' : ''} disabled:cursor-not-allowed`}
                   style={active ? undefined : { boxShadow: 'var(--shadow-inset)' }}
                 >
                   <span
-                    className={`block rounded-sm border ${active ? 'border-[#4F6CE8] bg-[#4F6CE8]/12' : 'border-black/20 bg-black/4'}`}
+                    className={`block rounded-sm border ${active ? 'border-brand bg-brand-100' : 'border-line-strong bg-surface-sunken'}`}
                     style={{ width: `${(f.width / 240) * 26}px`, height: `${(f.height / 240) * 26}px` }}
                   />
-                  <span className={`text-[11px] tabular-nums ${active ? 'font-semibold text-[#4F6CE8]' : 'text-[#394560]'}`}>
+                  <span className={`text-[11px] tabular-nums ${active ? 'font-semibold text-brand' : 'text-ink-2'}`}>
                     {r}
                   </span>
                 </button>
@@ -113,7 +113,7 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
             })}
           </div>
 
-          <p className="mt-3 text-[11px] leading-relaxed text-[#6B7793]">
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
             {preview
               ? `自动居中裁切，尺寸 ${preview.cropWidth}×${preview.cropHeight}。`
               : '原图按自身尺寸上传，正文里按容器宽度自适应。'}
@@ -122,17 +122,17 @@ export default function RatioPicker({ open, label, alt, current, mode, busy, onC
           <button
             type="button"
             onClick={onManual}
-            className="mt-2 flex w-full items-center justify-between rounded-xl border border-dashed border-black/15 px-3 py-2 text-left transition-colors hover:border-[#4F6CE8]/50 hover:bg-[#4F6CE8]/5"
+            className="mt-2 flex w-full items-center justify-between rounded-xl border border-dashed border-line-strong px-3 py-2 text-left transition-colors hover:border-brand-300 hover:bg-surface-tint"
           >
-            <span className="text-[12px] text-[#0E1525]">手动裁切</span>
-            <span className="text-[11px] text-[#6B7793]">
+            <span className="text-[12px] text-ink-1">手动裁切</span>
+            <span className="text-[11px] text-ink-3">
               {locked ? `比例锁 ${ratio}，自己拖决定留哪一块 →` : '自己拖，决定留哪一块 →'}
             </span>
           </button>
         </div>
 
         {/* Sticky so the actions stay reachable when the dialog scrolls on a short window. */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex justify-end gap-2 border-t border-black/6 bg-[#F6F8FC] px-6 py-3">
+        <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 flex justify-end gap-2 border-t border-line-2 bg-surface-elevated px-6 py-3">
           <button
             type="button"
             onClick={onCancel}

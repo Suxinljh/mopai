@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
 import { Toaster, toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import TopBar from '@/components/TopBar'
@@ -8,6 +8,16 @@ import PreviewPane from '@/components/PreviewPane'
 import SidePanel from '@/components/SidePanel'
 import RatioPicker from '@/components/RatioPicker'
 import ManualCropper from '@/components/ManualCropper'
+import { useSyncScroll, type PreviewScrollHandle } from '@/hooks/useSyncScroll'
+import { createMathRenderer, type MathSnapshot } from '@/lib/math'
+import {
+  diagramOf,
+  loadDiagramCache,
+  rememberDiagram,
+  saveDiagramCache,
+  type DiagramCache,
+} from '@/lib/diagram'
+import { renderDiagramPng } from '@/lib/diagram-raster'
 import { parseMarkdown } from '@/lib/parse'
 import {
   renderDoc,
@@ -21,14 +31,23 @@ import {
 } from '@/lib/render'
 import { getTheme } from '@/lib/themes'
 import { cleanHtml, copyPlain, copyRichText, downloadFile, previewPage } from '@/lib/clipboard'
-import { loadSettings, saveSettings, type DocRecord } from '@/lib/store'
+import { createDoc, loadSettings, saveSettings, type DocRecord } from '@/lib/store'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { useDocs, UNDO_DELETE_MS } from '@/hooks/useDocs'
 import { CHEATSHEET } from '@/lib/sample'
 import { useAuth } from '@/hooks/useAuth'
 import { trpc } from '@/providers/trpc'
-import { blobToBase64, cropToRatio, fileFromImageUrl, filenameForMime } from '@/lib/image'
+import { blobToBase64, compressForUpload, cropToRatio, fileFromImageUrl, filenameForMime } from '@/lib/image'
 import { DEFAULT_CAROUSEL_RATIO, type CarouselRatio } from '@/lib/types'
+import {
+  bundleFilename,
+  docxToDocxImport,
+  parseBundle,
+  parseMarkdownFile,
+  safeFilename,
+  toBundle,
+  toMarkdownFile,
+} from '@/lib/import-export'
 
 function plainTextOf(html: string): string {
   const div = document.createElement('div')
@@ -54,13 +73,11 @@ function resolveImg(src: string): string {
   return src
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result).split(',')[1] || '')
-    r.onerror = reject
-    r.readAsDataURL(file)
-  })
+/** Human-readable size, for reporting what compression saved. */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
 /** One pending upload: the files, where they go, and whether a ratio is required. */
@@ -79,6 +96,11 @@ interface FrameTask {
    * the previous copy is now unreferenced.
    */
   replacedKey?: string
+  /**
+   * Document position a drop landed on, so the image goes where it was dropped
+   * rather than wherever the cursor last was. Null for a clipboard paste.
+   */
+  at?: number | null
 }
 
 export default function EditorPage() {
@@ -93,9 +115,29 @@ export default function EditorPage() {
   const [uploadingKey, setUploadingKey] = useState<string | null>(null)
   const [frameTask, setFrameTask] = useState<FrameTask | null>(null)
   const [manualOpen, setManualOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const importKindRef = useRef<'markdown' | 'docx' | 'bundle'>('markdown')
+  const importRef = useRef<HTMLInputElement>(null)
   const editorRef = useRef<EditorHandle>(null)
+  const previewRef = useRef<PreviewScrollHandle>(null)
   const navigate = useNavigate()
-  const { user, isAuthenticated, logout } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user, isAuthenticated, isLoading: authLoading, isFetching: authFetching, logout } = useAuth()
+
+  // An agent hands the owner `<origin>/?doc=<id>`; this is where that lands.
+  const deepLinkId = searchParams.get('doc')
+  const clearDeepLink = useCallback(() => {
+    // Drop the parameter once it has been applied, so the address bar does not
+    // keep naming an article she has since switched away from.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('doc')
+        return next
+      },
+      { replace: true },
+    )
+  }, [setSearchParams])
 
   const {
     docs,
@@ -109,14 +151,27 @@ export default function EditorPage() {
     hasUnsavedChanges,
     neverSaved,
     addDoc,
+    addSampleDoc,
     removeDoc,
     undoRemove,
     saveCurrentToDrafts,
-  } = useDocs({ enabled: isAuthenticated })
+  } = useDocs({ enabled: isAuthenticated, deepLinkId, onDeepLinkSettled: clearDeepLink })
 
   const uploadMutation = trpc.storage.upload.useMutation()
 
   useEffect(() => saveSettings(settings), [settings])
+
+  // The article behind an agent's link only exists on the server, so it needs a
+  // session. Hand the id to the login page in the URL and let it come back.
+  //
+  // isFetching matters as much as isLoading here: auth.me caches `null` for a
+  // signed-out visitor, so isLoading is already false while the refetch that
+  // follows a successful login is still in flight. Redirecting on that stale
+  // answer throws a freshly signed-in owner straight back to /login.
+  useEffect(() => {
+    if (!deepLinkId || authLoading || authFetching || isAuthenticated) return
+    navigate(`/login?doc=${encodeURIComponent(deepLinkId)}`, { replace: true })
+  }, [deepLinkId, authLoading, authFetching, isAuthenticated, navigate])
 
   useEffect(() => {
     if (!notice) return
@@ -126,18 +181,88 @@ export default function EditorPage() {
 
   const theme = getTheme(settings.themeId)
 
-  const parsed = useMemo(() => parseMarkdown(activeDoc?.content || ''), [activeDoc?.content])
+  // Parsing, rendering and the materials list are all O(document) and used to run
+  // on every keystroke. Deferring the content keeps the keystroke itself on the
+  // urgent path; the preview simply catches up a frame later. Reads that write
+  // back into the source deliberately use activeDoc.content, never this.
+  const deferredContent = useDeferredValue(activeDoc?.content || '')
+  const parsed = useMemo(() => parseMarkdown(deferredContent), [deferredContent])
+
+  // MathJax is tens of megabytes of dependencies, so it loads on the first
+  // article that actually contains a formula and every result is cached after.
+  const mathRenderer = useMemo(() => createMathRenderer(), [])
+  // Turndown and its DOM parser cost about a hundred kilobytes of first-load
+  // bundle for an interaction most sessions never perform, so the converter is
+  // warmed a moment after mount instead of being imported statically.
+  const richPasteRef = useRef<typeof import('@/lib/rich-paste') | null>(null)
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void import('@/lib/rich-paste').then((m) => {
+        richPasteRef.current = m
+      })
+    }, 1200)
+    return () => window.clearTimeout(t)
+  }, [])
+  // The cache lives outside React, so the page holds an immutable view of it and
+  // swaps that view whenever a formula lands. Depending on the view - rather than
+  // on a counter the linter would call unnecessary - is what makes the re-render
+  // below actually happen.
+  const [mathSvgs, setMathSvgs] = useState<MathSnapshot>(() => mathRenderer.snapshot())
+  useEffect(() => {
+    setMathSvgs(mathRenderer.snapshot())
+    return mathRenderer.subscribe(() => setMathSvgs(mathRenderer.snapshot()))
+  }, [mathRenderer])
+  useEffect(() => {
+    const have = mathRenderer.snapshot()
+    for (const b of parsed.blocks) {
+      if (b.type === 'math' && have.get(b.tex, b.display) === null) {
+        void mathRenderer.warm(b.tex, b.display)
+      }
+    }
+  }, [parsed, mathRenderer])
+
+  // A mermaid fence stays a fence in the author's Markdown; the uploaded PNG is a
+  // derived cache keyed by the exact source, so editing the diagram invalidates
+  // it and an exported .md still renders on GitHub.
+  const [diagramRefs, setDiagramRefs] = useState<DiagramCache>(loadDiagramCache)
+  const resolveDiagram = useCallback((code: string) => diagramRefs.get(code) ?? null, [diagramRefs])
+  const diagramBusy = useRef(new Set<string>())
+  const diagramFailed = useRef(new Set<string>())
+  const diagramHinted = useRef(false)
+  const [diagramPending, setDiagramPending] = useState(0)
+
   const rendered = useMemo(
-    () => renderDoc(parsed, theme, settings.sig, resolveImg),
-    [parsed, theme, settings.sig],
+    () =>
+      renderDoc(
+        parsed,
+        theme,
+        settings.sig,
+        resolveImg,
+        (tex, display) => mathSvgs.get(tex, display),
+        resolveDiagram,
+      ),
+    [parsed, theme, settings.sig, mathSvgs, resolveDiagram],
   )
-  const materials = useMemo(() => collectMaterials(parsed), [parsed])
+  const materials = useMemo(() => collectMaterials(parsed, resolveDiagram), [parsed, resolveDiagram])
+
+  const { onEditorScroll, onPreviewScroll } = useSyncScroll({
+    enabled: settings.syncScroll,
+    blocks: parsed.blocks,
+    editorRef,
+    previewRef,
+  })
 
   const updateActive = (patch: Partial<DocRecord>) => {
     setDocs((ds) => ds.map((d) => (d.id === activeId ? { ...d, ...patch, updatedAt: Date.now() } : d)))
   }
 
   const handleCopy = async () => {
+    if (diagramPending > 0) {
+      toast.info('图表还在生成图片', {
+        description: '等它变成插图再复制，否则粘进公众号的是 mermaid 源码',
+      })
+      return
+    }
     const ok = await copyRichText(cleanHtml(rendered.html), plainTextOf(rendered.html))
     if (ok) {
       setCopied(true)
@@ -150,28 +275,123 @@ export default function EditorPage() {
     }
   }
 
-  const handleExport = (kind: 'clean' | 'page') => {
-    const name = (activeDoc?.name || '推文').replace(/[\\/:*?"<>|]/g, '')
-    if (kind === 'clean') downloadFile(`${name}_正文.html`, cleanHtml(rendered.html))
-    else downloadFile(`${name}_预览页.html`, previewPage(rendered.html, name))
+  const handleExport = (kind: 'clean' | 'page' | 'markdown' | 'bundle') => {
+    const name = activeDoc?.name || '推文'
+    if (kind === 'markdown') {
+      const f = toMarkdownFile(name, activeDoc?.content || '')
+      downloadFile(f.filename, f.content, f.mime)
+      toast.success('已导出 Markdown 源稿', { description: '方言标记原样保留，可以再导回来' })
+      return
+    }
+    if (kind === 'bundle') {
+      downloadFile(bundleFilename(docs.length), toBundle(docs, settings), 'application/json')
+      toast.success(`已导出 ${docs.length} 篇稿件`, { description: '含主题与署名设置，可在另一台设备导回' })
+      return
+    }
+    const safe = safeFilename(name, '推文', 'html')
+    if (kind === 'clean') downloadFile(safe.replace(/\.html$/, '_正文.html'), cleanHtml(rendered.html))
+    else downloadFile(safe.replace(/\.html$/, '_预览页.html'), previewPage(rendered.html, name))
     toast.success(kind === 'clean' ? '已导出干净正文 HTML' : '已导出预览页 HTML')
   }
 
-  /** Upload one file, optionally auto-cropping to a carousel frame first. */
-  const uploadOne = async (file: File, ratio?: CarouselRatio) => {
-    const payload = ratio ? await cropToRatio(file, ratio) : null
-    const contentBase64 = payload
-      ? await blobToBase64(payload.blob)
-      : await fileToBase64(file)
-    const uploadName = payload
-      ? filenameForMime(file.name, payload.mime)
-      : file.name.replace(/[^\w.一-鿿-]+/g, '_')
-    const res = await uploadMutation.mutateAsync({
-      name: uploadName,
-      contentBase64,
-      contentType: payload ? payload.mime : file.type,
+  /** Upload the images a Word document carried and fill them back into the placeholders. */
+  const importDocx = async (file: File) => {
+    const { htmlToDialect } = await import('@/lib/rich-paste')
+    const imported = await docxToDocxImport(await file.arrayBuffer(), htmlToDialect)
+    let markdown = imported.markdown
+    if (imported.images.length) {
+      if (!isAuthenticated) {
+        toast.error('这篇 Word 里有图片，但没有登录', {
+          description: '文字已经导入，图片位置留了占位；登录后重新导入可以带上图',
+          action: { label: '去登录', onClick: () => navigate('/login') },
+        })
+      } else {
+        const refs = await Promise.all(
+          imported.images.map(async (img) => {
+            try {
+              const res = await uploadMutation.mutateAsync({
+                name: `docx-${Date.now()}.png`,
+                contentBase64: img.dataUri.split(',')[1] || '',
+                contentType: img.contentType,
+              })
+              return `img:${res.key}`
+            } catch {
+              return null
+            }
+          }),
+        )
+        markdown = (await import('@/lib/rich-paste')).fillImageSlots(markdown, refs.map((r) => r ?? ''))
+        const failed = refs.filter((r) => r === null).length
+        if (failed) toast.warning(`${failed} 张图片没传上去，正文里留了占位`)
+      }
+    }
+    const doc = createDoc()
+    doc.name = safeFilename(file.name.replace(/\.[^.]+$/, ''), '导入的稿件', '') || '导入的稿件'
+    doc.content = markdown
+    setDocs((ds) => [doc, ...ds])
+    setActiveId(doc.id)
+    toast.success(`已导入「${doc.name}」`, {
+      description: imported.images.length ? `含 ${imported.images.length} 张图片` : undefined,
     })
-    return `img:${res.key}`
+  }
+
+  const handleImportFile = async (file: File, kind: 'markdown' | 'docx' | 'bundle') => {
+    setImporting(true)
+    try {
+      if (kind === 'docx') {
+        await importDocx(file)
+        return
+      }
+      const text = await file.text()
+      if (kind === 'markdown') {
+        const parsedFile = parseMarkdownFile(text, file.name)
+        const doc = createDoc()
+        doc.name = parsedFile.name
+        doc.content = parsedFile.content
+        setDocs((ds) => [doc, ...ds])
+        setActiveId(doc.id)
+        toast.success(`已导入「${doc.name}」`)
+        return
+      }
+      const result = parseBundle(text)
+      if (!result.ok) {
+        toast.error('这个备份文件读不了', { description: result.reason, duration: 9000 })
+        return
+      }
+      // Ids are kept as they are: the server's own importLocal already resolves a
+      // collision by keeping the stored copy, and inventing new ids here would
+      // silently duplicate every article instead.
+      const known = new Set(docs.map((d) => d.id))
+      const incoming = result.docs.filter((d) => !known.has(d.id))
+      const skipped = result.docs.length - incoming.length
+      setDocs((ds) => [...incoming, ...ds])
+      if (result.settings) setSettings((s) => ({ ...s, ...result.settings! }))
+      toast.success(`已导入 ${incoming.length} 篇稿件`, {
+        description: skipped ? `另有 ${skipped} 篇和本机重名，已跳过` : undefined,
+      })
+    } catch (e) {
+      toast.error('导入失败', { description: e instanceof Error ? e.message : '文件格式不认识' })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  /** Upload one file, optionally auto-cropping to a carousel frame first. */
+  const uploadOne = async (file: File, ratio?: CarouselRatio): Promise<{ ref: string; saved: string | null }> => {
+    const payload = ratio ? await cropToRatio(file, ratio) : null
+    // A loose image is the one that needs shrinking: a 12MP phone photo used to go
+    // up at full size for an article that is at most 677px wide.
+    const loose = payload ? null : await compressForUpload(file)
+    const blob = payload ? payload.blob : loose!.blob
+    const mime = payload ? payload.mime : loose!.mime
+    const contentBase64 = await blobToBase64(blob)
+    const uploadName = filenameForMime(file.name.replace(/[^\w.一-鿿-]+/g, '_'), mime)
+    const res = await uploadMutation.mutateAsync({ name: uploadName, contentBase64, contentType: mime })
+    const saved =
+      loose && !loose.untouched
+        ? `${formatBytes(loose.sourceBytes)} → ${formatBytes(loose.bytes)}${loose.grew ? '（压完更大，用了原图）' : ''}`
+        : null
+    return { ref: `img:${res.key}`, saved }
   }
 
   /** Upload an already-cropped blob produced by the manual cropper. */
@@ -184,6 +404,92 @@ export default function EditorPage() {
     })
     return `img:${res.key}`
   }
+
+  // Reached through a ref so the diagram pass below can depend on the document
+  // alone. Depending on uploadBlob directly would re-run that effect on every
+  // render and keep resetting its debounce.
+  const uploadDiagram = useRef<(blob: Blob) => Promise<string>>(() =>
+    Promise.reject(new Error('not ready')),
+  )
+  useEffect(() => {
+    uploadDiagram.current = (blob) =>
+      uploadBlob(blob, 'image/png', `diagram-${Date.now().toString(36)}.png`)
+  })
+
+  /**
+   * Rasterize every mermaid fence that has no PNG yet, then upload it.
+   *
+   * A diagram that cannot be built - bad syntax, no account, no network - leaves
+   * the fence rendering as source code, which is the useful thing to show. The
+   * source is parked after one failure instead of being retried, because the next
+   * keystroke would fail identically and toast identically.
+   */
+  useEffect(() => {
+    // A set: the same diagram pasted twice must not be uploaded twice.
+    const wanted = new Set<string>()
+    for (const b of parsed.blocks) {
+      // A fence the author has just opened holds no diagram yet; rasterizing it
+      // would only produce a syntax error.
+      if (b.type === 'code' && b.code.trim() && diagramOf(b.lang)) wanted.add(b.code)
+    }
+    if (!wanted.size) return
+    if (!isAuthenticated) {
+      if (!diagramHinted.current) {
+        diagramHinted.current = true
+        toast.info('登录后 mermaid 代码块会变成插图', {
+          description: '图表要先渲染成图片再上传；没登录时正文里保留源码',
+          action: { label: '去登录', onClick: () => navigate('/login') },
+          duration: 8000,
+        })
+      }
+      return
+    }
+    const todo = [...wanted].filter(
+      (code) =>
+        !diagramRefs.has(code) && !diagramBusy.current.has(code) && !diagramFailed.current.has(code),
+    )
+    if (!todo.length) return
+
+    const park = (code: string, title: string, e: unknown) => {
+      diagramFailed.current.add(code)
+      toast.error(title, {
+        description: e instanceof Error ? e.message.slice(0, 140) : String(e),
+        duration: 8000,
+      })
+    }
+    const rasterize = async (code: string) => {
+      diagramBusy.current.add(code)
+      setDiagramPending((n) => n + 1)
+      try {
+        const png = await renderDiagramPng(code)
+        try {
+          const ref = await uploadDiagram.current(png.blob)
+          setDiagramRefs((prev) => {
+            const next = new Map(prev)
+            rememberDiagram(next, code, ref)
+            saveDiagramCache(next)
+            return next
+          })
+        } catch (e) {
+          park(code, '图表上传失败，正文里先保留源码', e)
+        }
+      } catch (e) {
+        park(code, '图表语法有误，正文里保留源码', e)
+      } finally {
+        diagramBusy.current.delete(code)
+        setDiagramPending((n) => n - 1)
+      }
+    }
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        for (const code of todo) {
+          if (!diagramBusy.current.has(code)) await rasterize(code)
+        }
+      })()
+    }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [parsed, diagramRefs, isAuthenticated, navigate])
 
   /**
    * Tell the owner their previous upload is now unreferenced.
@@ -227,15 +533,17 @@ export default function EditorPage() {
       }
       setUploadingKey(`drop-${file.name}`)
       try {
-        const ref = await uploadOne(file, ratio ?? undefined)
+        const { ref, saved } = await uploadOne(file, ratio ?? undefined)
         if (task?.item && task.replacedKey) {
           // Re-crop of a standalone image via the ratio picker: replace in place.
           replaceRecropped(ref, task)
           continue
         }
         const alt = file.name.replace(/\.[^.]+$/, '')
-        editorRef.current?.insertText(`![${alt}](${ref})`)
-        toast.success(files.length > 1 ? `${file.name} 已插入` : '图片已插入光标位置')
+        editorRef.current?.insertAt(task?.at ?? null, `![${alt}](${ref})`)
+        toast.success(files.length > 1 ? `${file.name} 已插入` : '图片已插入', {
+          description: saved ?? undefined,
+        })
       } catch (e) {
         toast.error(`${file.name} 上传失败`, {
           description: e instanceof Error ? e.message : '请稍后重试',
@@ -339,7 +647,7 @@ export default function EditorPage() {
         replaceRecropped(ref, task)
       } else {
         const alt = file.name.replace(/\.[^.]+$/, '')
-        editorRef.current?.insertText(`![${alt}](${ref})`)
+        editorRef.current?.insertAt(task.at ?? null, `![${alt}](${ref})`)
         toast.success('已按手动裁切插入')
       }
     } catch (e) {
@@ -378,7 +686,7 @@ export default function EditorPage() {
       }
       setUploadingKey(`${item.no}-${item.alt}`)
       try {
-        const ref = await uploadOne(file, ratio)
+        const { ref } = await uploadOne(file, ratio)
         content = fillImageSrc(content, slot.alt, occurrence, ref)
         okCount++
       } catch (e) {
@@ -405,6 +713,58 @@ export default function EditorPage() {
     } else if (okCount > 0) {
       toast.success(`${item.no} 已按 ${ratio} 裁切上传并回填`)
     }
+  }
+
+  /**
+   * Images that arrived through the editor itself: a clipboard paste or a drop.
+   * Distinct from startUpload, which comes from a sidebar slot that already knows
+   * which image it is filling.
+   */
+  const handleEditorFiles = (files: File[], at: number | null) => {
+    if (!isAuthenticated) {
+      toast.error('上传图片需要先登录', {
+        description: '编辑和复制不需要登录',
+        action: { label: '去登录', onClick: () => navigate('/login') },
+      })
+      return
+    }
+    const images = files.filter((f) => /^image\//.test(f.type))
+    if (images.length < files.length) {
+      const bad = files.find((f) => !/^image\//.test(f.type))!
+      toast.error(`${bad.name} 不是图片，已跳过`)
+    }
+    if (!images.length) return
+    setFrameTask({ files: images, mode: 'loose', at })
+  }
+
+  /**
+   * Clipboard HTML from Word / Feishu / Notion. Returning false hands the event
+   * back to CodeMirror, which pastes the plain text - the right outcome when the
+   * clipboard already holds Markdown or ordinary prose, and also the fallback for
+   * the first instants of a session before the converter module has loaded.
+   */
+  const handleHtml = (html: string, plain: string): boolean => {
+    const rp = richPasteRef.current
+    if (!rp) return false
+    const d = rp.classifyPaste(html, plain)
+    if (d.kind === 'image-placeholder') {
+      // Claim the event: inserting "[Image #1]" into the article helps nobody.
+      toast.error('拿不到真实图片', { description: d.reason, duration: 9000 })
+      return true
+    }
+    if (d.kind === 'ide-code' || d.kind === 'code-block') {
+      editorRef.current?.insertAt(null, '```' + d.lang + '\n' + plain.replace(/\s+$/, '') + '\n```')
+      toast.success('已作为代码块插入', { description: d.reason })
+      return true
+    }
+    if (!d.convert) return false
+    const md = rp.htmlToDialect(html)
+    if (!md.trim()) return false
+    editorRef.current?.insertAt(null, md)
+    toast.success('已按公众号语法转换', {
+      description: '粘贴进来的图片不会自动上传，需要单独插入',
+    })
+    return true
   }
 
   /** Entry point from the sidebar: decide whether a ratio has to be chosen first. */
@@ -441,16 +801,19 @@ export default function EditorPage() {
         onRename={(name) => updateActive({ name })}
         onSelectDoc={setActiveId}
         onCreateDoc={() => addDoc()}
+        onCreateSample={() => addSampleDoc()}
         onDeleteDoc={(id) => {
           const name = docs.find((d) => d.id === id)?.name || '未命名稿件'
           removeDoc(id)
-          toast(`已删除「${name}」`, {
-            description: '10 秒内可以撤销',
+          toast(`「${name}」已移入回收站`, {
+            description: '10 秒内可以撤销，之后去草稿箱的回收站找回',
             duration: UNDO_DELETE_MS,
             action: {
               label: '撤销',
               onClick: () => {
-                if (undoRemove(id)) toast.success('已恢复')
+                void undoRemove(id).then((ok) => {
+                  if (ok) toast.success('已恢复')
+                })
               },
             },
           })
@@ -473,6 +836,12 @@ export default function EditorPage() {
         copying={copied}
         onCopy={handleCopy}
         onExport={handleExport}
+        onImport={(kind) => {
+          importKindRef.current = kind
+          importRef.current?.click()
+        }}
+        importing={importing}
+        onOpenReferences={() => navigate('/references')}
         panelOpen={panelOpen}
         onTogglePanel={() => setPanelOpen((v) => !v)}
         userName={user?.name || ''}
@@ -496,36 +865,37 @@ export default function EditorPage() {
         {/* 左：Markdown 编辑（支持拖图上传） */}
         <ResizablePanel id="editor" defaultSize="55%" minSize="320px" className="min-w-0">
           <div
-            data-theme="yoru"
-            className="flex h-full min-w-0 flex-col bg-[#0B1020]"
+            className="flex h-full min-w-0 flex-col bg-surface-sunken"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
+              // CodeMirror claims drops inside the editor and preventDefaults
+              // them; handling those here too would open a second picker. This
+              // only stops the browser navigating away from a file dropped on the
+              // surrounding chrome.
+              if (e.defaultPrevented) return
               e.preventDefault()
-              const files = Array.from(e.dataTransfer.files || [])
-              if (!files.length) return
-              setFrameTask({ files, mode: 'loose' })
             }}
           >
-            <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/6 px-4">
-              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7691]">
+            <div className="flex h-11 shrink-0 items-center justify-between border-b border-line-1 px-4">
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
                 markdown · 语义源稿
-                <span className="ml-2 normal-case tracking-normal text-[#434D67]">可拖拽图片上传 · ctrl/⌘+space 补全 · ⌘B 加粗 · ⌘K 链接</span>
+                <span className="ml-2 normal-case tracking-normal text-ink-4">可拖拽图片上传 · ctrl/⌘+space 补全 · ⌘B 加粗 · ⌘K 链接</span>
               </span>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="rounded-lg px-2 py-1 text-[11px] text-[#A8B2CC] transition-colors hover:bg-white/6 hover:text-white">
+                  <button className="rounded-lg px-2 py-1 text-[11px] text-ink-2 transition-colors hover:bg-line-1 hover:text-ink-1">
                     语法速查
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="ya-pop w-80 border-none p-0">
-                  <p className="ya-eyebrow border-b border-black/8 px-3 py-2">
+                  <p className="ya-eyebrow border-b border-line-2 px-3 py-2">
                     公众号专用语法
                   </p>
                   <ul className="max-h-80 overflow-y-auto p-2">
                     {CHEATSHEET.map((c) => (
-                      <li key={c.syntax} className="flex items-baseline gap-3 rounded-lg px-2 py-1.5 hover:bg-black/3">
-                        <code className="shrink-0 rounded-md bg-[#4F6CE8]/10 px-1.5 py-0.5 font-mono text-[11px] text-[#4F6CE8]">{c.syntax}</code>
-                        <span className="text-[12px] text-[#394560]">{c.desc}</span>
+                      <li key={c.syntax} className="flex items-baseline gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-tint">
+                        <code className="shrink-0 rounded-md bg-brand-100 px-1.5 py-0.5 font-mono text-[11px] text-brand-600">{c.syntax}</code>
+                        <span className="text-[12px] text-ink-2">{c.desc}</span>
                       </li>
                     ))}
                   </ul>
@@ -533,7 +903,15 @@ export default function EditorPage() {
               </Popover>
             </div>
             <div className="min-h-0 flex-1">
-              <EditorPane ref={editorRef} value={activeDoc?.content || ''} onChange={(content) => updateActive({ content })} />
+              <EditorPane
+                ref={editorRef}
+                value={activeDoc?.content || ''}
+                docKey={activeId}
+                onChange={(content) => updateActive({ content })}
+                onScroll={onEditorScroll}
+                onFiles={handleEditorFiles}
+                onHtml={handleHtml}
+              />
             </div>
           </div>
         </ResizablePanel>
@@ -541,8 +919,18 @@ export default function EditorPage() {
         <ResizableHandle withHandle />
 
         {/* 中：预览（375/677 是里面手机框的宽度，栏宽随便拖） */}
-        <ResizablePanel id="preview" defaultSize="500px" minSize="380px" maxSize="820px" className="min-w-0 border-l border-black/8">
-          <PreviewPane html={rendered.html} stats={rendered.stats} width={previewWidth} onWidthChange={setPreviewWidth} />
+        <ResizablePanel id="preview" defaultSize="500px" minSize="380px" maxSize="820px" className="min-w-0 border-l border-line-2">
+          <PreviewPane
+            ref={previewRef}
+            html={rendered.html}
+            stats={rendered.stats}
+            blockOffsets={rendered.blockOffsets}
+            width={previewWidth}
+            onWidthChange={setPreviewWidth}
+            syncScroll={settings.syncScroll}
+            onSyncScrollChange={(v) => setSettings((s) => ({ ...s, syncScroll: v }))}
+            onScroll={onPreviewScroll}
+          />
         </ResizablePanel>
 
         {/* 右：折叠侧栏 */}
@@ -623,6 +1011,18 @@ export default function EditorPage() {
           setManualOpen(false)
           setFrameTask(null)
           if (task) void uploadCroppedBlob(blob, mime, task)
+        }}
+      />
+
+      <input
+        ref={importRef}
+        type="file"
+        className="hidden"
+        accept={importKindRef.current === 'docx' ? '.docx' : importKindRef.current === 'bundle' ? '.json' : '.md,.markdown,.txt'}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void handleImportFile(f, importKindRef.current)
+          e.target.value = ''
         }}
       />
 

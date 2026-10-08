@@ -1,4 +1,5 @@
 import { carouselFrame } from './themes'
+import { compressImage, drawWithMatte } from './image-compress'
 import type { CarouselRatio } from './types'
 
 export interface CroppedImage {
@@ -61,7 +62,8 @@ async function renderCrop(
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('当前浏览器不支持 canvas 裁切')
   ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(
+  drawWithMatte(
+    ctx,
     img,
     Math.round(area.x),
     Math.round(area.y),
@@ -71,9 +73,13 @@ async function renderCrop(
     0,
     canvas.width,
     canvas.height,
+    mime,
   )
   const blob = await canvasToBlob(canvas, mime, 0.92)
-  return { blob, width: canvas.width, height: canvas.height, mime }
+  // Safari cannot encode WebP and silently substitutes PNG, so trust the blob
+  // over what we asked for — otherwise the upload is labelled with the wrong type.
+  const actual = blob.type || mime
+  return { blob, width: canvas.width, height: canvas.height, mime: actual }
 }
 
 /**
@@ -168,6 +174,48 @@ export function blobToBase64(blob: Blob): Promise<string> {
     r.onerror = () => reject(new Error('读取裁切结果失败'))
     r.readAsDataURL(blob)
   })
+}
+
+export interface UploadReady {
+  blob: Blob
+  mime: string
+  sourceBytes: number
+  bytes: number
+  /** Compression made it bigger, so the original goes up instead. */
+  grew: boolean
+  /** Nothing was re-encoded at all - already small enough and correctly sized. */
+  untouched: boolean
+}
+
+/**
+ * Shrink a loose image before it goes to R2.
+ *
+ * A 12MP phone photo used to be uploaded at full size even though the article is
+ * at most 677px wide. Carousel slides deliberately skip this: they are already
+ * cropped into a fixed frame, so a second lossy pass buys nothing.
+ */
+export async function compressForUpload(file: File): Promise<UploadReady> {
+  const out = await compressImage(file)
+  // quality === 1 is compressImage's sentinel for "source handed back untouched".
+  const untouched = out.quality === 1
+  if (untouched || out.grew) {
+    return {
+      blob: file,
+      mime: file.type || out.mime,
+      sourceBytes: file.size,
+      bytes: file.size,
+      grew: out.grew,
+      untouched,
+    }
+  }
+  return {
+    blob: out.blob,
+    mime: out.mime,
+    sourceBytes: out.sourceBytes,
+    bytes: out.bytes,
+    grew: false,
+    untouched: false,
+  }
 }
 
 /**

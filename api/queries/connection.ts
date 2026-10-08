@@ -57,6 +57,16 @@ function openDatabase(): DatabaseSync {
   if (!columns.some((c) => c.name === 'savedAt')) {
     db.exec('ALTER TABLE docs ADD COLUMN savedAt INTEGER')
   }
+  // Same story for the recycle bin: rows written before it existed are simply
+  // not in it.
+  if (!columns.some((c) => c.name === 'deletedAt')) {
+    db.exec('ALTER TABLE docs ADD COLUMN deletedAt INTEGER')
+  }
+  // …and for provenance: a row with no `source` predates the agent API, which
+  // reads as "written in the browser" — the same as a row created there.
+  if (!columns.some((c) => c.name === 'source')) {
+    db.exec('ALTER TABLE docs ADD COLUMN source TEXT')
+  }
 
   // Same for uploads that arrive without a login: older databases have no
   // `visitor` column, and every anonymous query filters on it. ALTER appends,

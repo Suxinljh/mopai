@@ -13,20 +13,33 @@ export interface InlineSeg {
 
 export type CellAlign = 'left' | 'center' | 'right'
 
+/**
+ * Where a block came from, in lines of the full Markdown source.
+ *
+ * 0-based, `lineEnd` exclusive, and counted from the top of the file rather
+ * than from the top of the body — front matter occupies real editor lines, so
+ * a body-relative number sends "jump to this image" to the wrong place.
+ */
+export interface SourceSpan {
+  line: number
+  lineEnd: number
+}
+
 export type Block =
-  | { type: 'paragraph'; segs: InlineSeg[] }
-  | { type: 'heading'; kicker: string; title: string; numbered: boolean } // ## KICKER | 标题
-  | { type: 'subheading'; title: string } // ###
-  | { type: 'center'; segs: InlineSeg[] } // :::center 居中强调句
-  | { type: 'quoteCard'; segs: InlineSeg[] } // > 金句卡片
-  | { type: 'quoteBox'; paras: InlineSeg[][] } // :::quote 引文框
-  | { type: 'image'; alt: string; src: string; line: number; occurrence: number } // ![图注](src)
-  | { type: 'carousel'; title: string; ratio: CarouselRatio; items: CarouselItem[]; line: number; occurrence: number } // :::carousel [比例] 标题
-  | { type: 'signature' } // @signature
-  | { type: 'list'; ordered: boolean; items: InlineSeg[][] }
-  | { type: 'table'; align: CellAlign[]; head: InlineSeg[][]; rows: InlineSeg[][][] } // GFM 表格
-  | { type: 'code'; lang: string; code: string }
-  | { type: 'hr' }
+  | ({ type: 'paragraph'; segs: InlineSeg[] } & SourceSpan)
+  | ({ type: 'heading'; kicker: string; title: string; numbered: boolean } & SourceSpan) // ## KICKER | 标题
+  | ({ type: 'subheading'; title: string } & SourceSpan) // ###
+  | ({ type: 'center'; segs: InlineSeg[] } & SourceSpan) // :::center 居中强调句
+  | ({ type: 'quoteCard'; segs: InlineSeg[] } & SourceSpan) // > 金句卡片
+  | ({ type: 'quoteBox'; paras: InlineSeg[][] } & SourceSpan) // :::quote 引文框
+  | ({ type: 'image'; alt: string; src: string; occurrence: number } & SourceSpan) // ![图注](src)
+  | ({ type: 'carousel'; title: string; ratio: CarouselRatio; items: CarouselItem[]; occurrence: number } & SourceSpan) // :::carousel [比例] 标题
+  | ({ type: 'signature' } & SourceSpan) // @signature
+  | ({ type: 'list'; ordered: boolean; items: InlineSeg[][] } & SourceSpan)
+  | ({ type: 'table'; align: CellAlign[]; head: InlineSeg[][]; rows: InlineSeg[][][] } & SourceSpan) // GFM 表格
+  | ({ type: 'code'; lang: string; code: string } & SourceSpan)
+  | ({ type: 'math'; tex: string; display: boolean } & SourceSpan) // $$…$$ on its own lines
+  | ({ type: 'hr' } & SourceSpan)
 
 export interface CarouselItem {
   alt: string

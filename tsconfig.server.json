@@ -20,5 +20,9 @@
       "@db/*": ["./db/*"]
     }
   },
-  "include": ["api", "contracts", "db"]
+  // `src/types` holds ambient module declarations (markdown-it plugins, vendors
+  // shipping no types). The server program needs them because the agent router
+  // reuses the app's own parser and theme list; listing declarations pulls in no
+  // runtime code from `src`.
+  "include": ["api", "contracts", "db", "src/types"]
 }

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { trpc } from '@/providers/trpc'
-import { createDoc, loadDocs, loadActiveId, saveDocs, saveActiveId, type DocRecord } from '@/lib/store'
+import { createDoc, createSampleDoc, loadDocs, loadActiveId, saveDocs, saveActiveId, type DocRecord } from '@/lib/store'
 
 export type SyncState = 'loading' | 'synced' | 'saving' | 'local' | 'error'
 
@@ -10,6 +10,14 @@ export const UNDO_DELETE_MS = 10_000
 interface Options {
   /** Server sync needs a session; anonymous visitors stay on localStorage. */
   enabled: boolean
+  /**
+   * Article to open, from a `?doc=<id>` link — that is how an agent hands its
+   * pushed draft to the owner. Applied once the list it should be in has
+   * arrived, then reported back through `onDeepLinkSettled` so the caller can
+   * drop the parameter from the URL.
+   */
+  deepLinkId?: string | null
+  onDeepLinkSettled?: (found: boolean) => void
 }
 
 /**
@@ -22,39 +30,51 @@ interface Options {
  *
  * 这样打字时不会有网络请求一直跑，草稿箱里也只有主动保存过的东西。
  */
-export function useDocs({ enabled }: Options) {
+export function useDocs({ enabled, deepLinkId, onDeepLinkSettled }: Options) {
   const [docs, setDocs] = useState<DocRecord[]>([])
   const [activeId, setActiveId] = useState('')
   const [syncState, setSyncState] = useState<SyncState>('loading')
   const [notice, setNotice] = useState<string | null>(null)
   /** 内容变过但还没写进数据库的稿件 id，用来点亮保存按钮。 */
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
+  /**
+   * Trashed docs this browser holds while anonymous. Once signed in the server's
+   * bin is the truth and this stays empty; purely local trashed drafts (never
+   * saved) live here so they survive a reload.
+   */
+  const [localTrash, setLocalTrash] = useState<DocRecord[]>(() =>
+    loadDocs().docs.filter((d) => d.deletedAt),
+  )
 
   const utils = trpc.useUtils()
   const readyRef = useRef(false)
   const migratedRef = useRef(false)
+  /** A `?doc=<id>` link is applied once, then forgotten. */
+  const deepLinkRef = useRef<string | null>(deepLinkId ?? null)
+  const deepLinkDone = useRef(false)
   const saveTimer = useRef<number | null>(null)
   const pendingRef = useRef<Set<string>>(new Set())
-  // Docs deleted within the undo window: kept whole so 撤销 can put them back
-  // exactly where they were; the server delete only fires when the timer runs
-  // out. Closing the tab first simply skips the delete — the doc survives.
-  const pendingDeletesRef = useRef<Map<string, { doc: DocRecord; index: number; timer: number }>>(new Map())
   // 最近一次已落库的内容，用来判断是否真的需要再写一次
   const lastSavedRef = useRef<Map<string, string>>(new Map())
 
   const listQuery = trpc.docs.list.useQuery(undefined, { enabled, retry: false })
+  const trashQuery = trpc.docs.trash.useQuery(undefined, { enabled, retry: false })
   const importMutation = trpc.docs.importLocal.useMutation()
   const saveMutation = trpc.docs.save.useMutation()
   const saveToDraftsMutation = trpc.docs.saveToDrafts.useMutation()
   const removeMutation = trpc.docs.remove.useMutation()
+  const restoreMutation = trpc.docs.restore.useMutation()
+  const purgeMutation = trpc.docs.purge.useMutation()
 
   // 1. 首次加载：先显示本地缓存，服务器结果到了再覆盖
   useEffect(() => {
     if (readyRef.current) return
     readyRef.current = true
     const local = loadDocs()
-    setDocs(local.docs)
-    setActiveId(local.activeId)
+    const live = local.docs.filter((d) => !d.deletedAt)
+    const shown = live.length ? live : [createDoc()]
+    setDocs(shown)
+    setActiveId(shown.some((d) => d.id === local.activeId) ? local.activeId : shown[0].id)
     if (!enabled) setSyncState('local')
   }, [enabled])
 
@@ -70,12 +90,14 @@ export function useDocs({ enabled }: Options) {
       try {
         if (remote.length === 0) {
           const local = loadDocs()
-          if (local.docs.length > 0) {
-            await importMutation.mutateAsync({ docs: local.docs })
-            setNotice(`已把浏览器里的 ${local.docs.length} 篇稿件同步到账号`)
+          const live = local.docs.filter((d) => !d.deletedAt)
+          if (live.length > 0) {
+            await importMutation.mutateAsync({ docs: live })
+            setNotice(`已把浏览器里的 ${live.length} 篇稿件同步到账号`)
           }
-          setDocs(local.docs)
-          setActiveId(local.activeId)
+          const shown = live.length ? live : [createDoc()]
+          setDocs(shown)
+          setActiveId(shown.some((d) => d.id === local.activeId) ? local.activeId : shown[0].id)
         } else {
           const mapped: DocRecord[] = remote.map((d) => ({
             id: d.id,
@@ -83,6 +105,8 @@ export function useDocs({ enabled }: Options) {
             content: d.content,
             updatedAt: d.updatedAt.getTime(),
             savedAt: d.savedAt ? d.savedAt.getTime() : null,
+            deletedAt: null,
+            source: d.source ?? null,
           }))
           setDocs(mapped)
           const stored = loadActiveId()
@@ -99,13 +123,31 @@ export function useDocs({ enabled }: Options) {
 
   // 3. 本地缓存始终跟着写一份（每次改动都写，纯本地，不碰网络）
   useEffect(() => {
-    if (!docs.length) return
-    saveDocs(docs, activeId)
-  }, [docs, activeId])
+    if (!docs.length && !localTrash.length) return
+    saveDocs([...docs, ...localTrash], activeId)
+  }, [docs, localTrash, activeId])
 
   useEffect(() => {
     if (activeId) saveActiveId(activeId)
   }, [activeId])
+
+  // 5. Agent 推来的链接（?doc=<id>）优先于「上次看的那篇」，但要等列表落地：
+  //    那篇稿子在服务器上，本地缓存里还没有它。未登录时不消费它 —— 匿名根本看
+  //    不到服务端的稿件，说「不在这个账号里」是把原因说错了，EditorPage 会先带
+  //    她去登录，登录后再回到这个链接。
+  useEffect(() => {
+    const id = deepLinkRef.current
+    if (!id || deepLinkDone.current || !enabled || syncState === 'loading') return
+    deepLinkDone.current = true
+    deepLinkRef.current = null
+    const found = docs.some((d) => d.id === id)
+    if (found) {
+      setActiveId(id)
+    } else {
+      setNotice('链接指向的稿件不在这个账号里，可能已经被删掉了')
+    }
+    onDeepLinkSettled?.(found)
+  }, [docs, syncState, enabled, onDeepLinkSettled])
 
   const flush = useCallback(
     async (ids: string[]) => {
@@ -180,6 +222,13 @@ export function useDocs({ enabled }: Options) {
     return d
   }, [])
 
+  const addSampleDoc = useCallback(() => {
+    const d = createSampleDoc()
+    setDocs((ds) => [d, ...ds])
+    setActiveId(d.id)
+    return d
+  }, [])
+
   /** 保存到草稿箱：这是唯一让文章进入归档的动作。 */
   const saveCurrentToDrafts = useCallback(async () => {
     const doc = docs.find((d) => d.id === activeId)
@@ -212,16 +261,12 @@ export function useDocs({ enabled }: Options) {
   }, [docs, activeId, enabled, saveToDraftsMutation, utils])
 
   /**
-   * Soft delete: the doc leaves the list at once, but the server delete is
-   * deferred by UNDO_DELETE_MS so 撤销 can bring it back untouched. Any queued
-   * auto-save for this doc is dropped too — a save in flight after the delete
-   * would otherwise re-create the row on the server (the save mutation is an
-   * upsert), making a deleted article come back from the dead.
+   * 移入回收站：列表里立刻消失，但服务端只做软删除，所以回收站能原样请回来。
+   * 未登录时回收站只存在这个浏览器里。
    */
   const removeDoc = useCallback(
     (id: string) => {
-      const index = docs.findIndex((d) => d.id === id)
-      const doc = docs[index]
+      const doc = docs.find((d) => d.id === id)
       if (!doc) return
       const rest = docs.filter((d) => d.id !== id)
       const next = rest.length ? rest : [createDoc()]
@@ -229,39 +274,101 @@ export function useDocs({ enabled }: Options) {
       if (activeId === id) setActiveId(next[0].id)
       lastSavedRef.current.delete(id)
       pendingRef.current.delete(id)
-      const timer = window.setTimeout(() => {
-        pendingDeletesRef.current.delete(id)
-        if (!enabled) return
+      if (enabled) {
         removeMutation
           .mutateAsync({ id })
-          .then(() => utils.docs.drafts.invalidate())
-          .catch(() => setNotice('删除没同步到云端，下次打开可能还在'))
-      }, UNDO_DELETE_MS)
-      pendingDeletesRef.current.set(id, { doc, index, timer })
+          .then(() => utils.docs.trash.invalidate())
+          .catch(() => setNotice('删除没同步到云端，回收站里可能还看不到'))
+      } else {
+        setLocalTrash((t) => [{ ...doc, deletedAt: Date.now() }, ...t])
+      }
     },
     [docs, activeId, enabled, removeMutation, utils],
   )
 
-  /** Put back a doc deleted within the undo window. Returns false if too late. */
-  const undoRemove = useCallback((id: string): boolean => {
-    const pending = pendingDeletesRef.current.get(id)
-    if (!pending) return false
-    window.clearTimeout(pending.timer)
-    pendingDeletesRef.current.delete(id)
-    setDocs((ds) => {
-      if (ds.some((d) => d.id === id)) return ds
-      const copy = [...ds]
-      copy.splice(Math.min(pending.index, copy.length), 0, pending.doc)
-      return copy
-    })
-    setActiveId(pending.doc.id)
-    if (pending.doc.savedAt !== null) lastSavedRef.current.set(pending.doc.id, pending.doc.content)
-    return true
-  }, [])
+  /** 从回收站请回来。匿名时是纯本地操作。 */
+  const restoreDoc = useCallback(
+    async (id: string): Promise<boolean> => {
+      const local = localTrash.find((d) => d.id === id)
+      if (local) {
+        setLocalTrash((t) => t.filter((d) => d.id !== id))
+        setDocs((ds) => (ds.some((d) => d.id === id) ? ds : [{ ...local, deletedAt: null }, ...ds]))
+        return true
+      }
+      if (!enabled) return false
+      try {
+        const row = (await restoreMutation.mutateAsync({ id })).doc
+        if (row) {
+          lastSavedRef.current.set(row.id, row.content)
+          setDocs((ds) =>
+            ds.some((d) => d.id === row.id)
+              ? ds
+              : [
+                  {
+                    id: row.id,
+                    name: row.name,
+                    content: row.content,
+                    updatedAt: row.updatedAt.getTime(),
+                    savedAt: row.savedAt ? row.savedAt.getTime() : null,
+                    deletedAt: null,
+                    source: row.source ?? null,
+                  },
+                  ...ds,
+                ],
+          )
+        }
+        await utils.docs.trash.invalidate()
+        return true
+      } catch {
+        setNotice('恢复失败，稍后再试')
+        return false
+      }
+    },
+    [localTrash, enabled, restoreMutation, utils],
+  )
+
+  /** The 10-second toast action; the bin page calls restoreDoc directly. */
+  const undoRemove = useCallback((id: string) => restoreDoc(id), [restoreDoc])
+
+  /** 彻底删除。图不会被连带删，它们会进素材库的「没在用的旧图」。 */
+  const purgeDoc = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (localTrash.some((d) => d.id === id)) {
+        setLocalTrash((t) => t.filter((d) => d.id !== id))
+        return true
+      }
+      if (!enabled) return false
+      try {
+        await purgeMutation.mutateAsync({ id })
+        await utils.docs.trash.invalidate()
+        return true
+      } catch {
+        setNotice('彻底删除失败，稍后再试')
+        return false
+      }
+    },
+    [localTrash, enabled, purgeMutation, utils],
+  )
+
+  const trashDocs = useMemo(
+    () =>
+      enabled
+        ? (trashQuery.data ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            content: '',
+            updatedAt: 0,
+            savedAt: t.savedAt ? t.savedAt.getTime() : null,
+            deletedAt: t.deletedAt ? t.deletedAt.getTime() : null,
+          }))
+        : localTrash,
+    [enabled, trashQuery.data, localTrash],
+  )
 
   const refresh = useCallback(() => {
     void utils.docs.list.invalidate()
     void utils.docs.drafts.invalidate()
+    void utils.docs.trash.invalidate()
   }, [utils])
 
   const activeDoc = docs.find((d) => d.id === activeId) || null
@@ -275,6 +382,7 @@ export function useDocs({ enabled }: Options) {
     activeId,
     setActiveId,
     activeDoc,
+    trashDocs,
     syncState,
     notice,
     clearNotice: () => setNotice(null),
@@ -282,8 +390,11 @@ export function useDocs({ enabled }: Options) {
     neverSaved,
     dirtyCount: dirtyIds.size,
     addDoc,
+    addSampleDoc,
     removeDoc,
     undoRemove,
+    restoreDoc,
+    purgeDoc,
     saveCurrentToDrafts,
     refresh,
   }

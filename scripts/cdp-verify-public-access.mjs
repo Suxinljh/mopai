@@ -173,6 +173,11 @@ for (const needle of ['==', ':::center', ':::quote', ':::carousel', '@signature'
   check(`sample demonstrates ${needle}`, source.includes(needle))
 }
 
+// The preview is a deferred render of the same doc; over a slow link it can lag
+// the fixed settle time, and measuring too early reads an empty body.
+const previewReady = await waitFor(`document.querySelectorAll('span[leaf]').length > 50`, 20000)
+check('the preview rendered the sample', previewReady === true)
+
 const previewShape = await evaluate(`(() => {
   const p = document.querySelector('[data-preview], main section') ?? document.body
   const table = p.querySelector('table')
