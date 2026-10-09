@@ -328,8 +328,9 @@ docker compose logs -f app
 
 镜像发布在 Docker Hub 的 **`suxinljh/mopai`** 上，所以部署主机（NAS）只需要 `docker-compose.yml` + `.env` 两个文件，**不需要源码树**：
 
-- `image:` 默认写的是 **`latest`**；每次发版会同时推一个日期 tag（如 `suxinljh/mopai:2026-10-08`），想锁定版本就把它替换进去。
-- 更新是**两步**，`pull` 不能省：compose 只在被明确要求时才重新拉取，光敲 `up -d` 会安安静静复用本地那个旧的 `latest`，现象就是「更新了但没变化」。
+- `image:` 默认写的是 **`latest`**；每次发版会同时推日期 tag（`suxinljh/mopai:2026-10-08`）与每次提交唯一的 `sha-<7位>` tag，想锁定版本就把其中任一个替换进去。
+- 更新是**两步**，`pull` 不能省：compose 只在被明确要求时才重新拉取，光敲 `up -d` 会安安静静复用本地那个旧的 `latest`，现象就是「更新了但没变化」。下文「自动发布（GitHub Actions）」与「更新了但没变化？」两节分别讲了发布链路和排查顺序。
+- **推送到 `master` 会自动构建发布**，一般不需要再手动 `docker push`。
 
 `docker-compose.yml` 里**故意没有 `build:`**——它只是**运行时**描述符。部署主机上没有源码树，留着 `build:` 只会让 Docker 界面的「构建」按钮变成一个永远点不完的坏按钮（实测报 `failed to read dockerfile: open Dockerfile: no such file or directory`）。
 
@@ -371,22 +372,79 @@ docker compose --profile tunnel up -d
 
 图床 Worker 绑在自定义域上（`mopai-worker/wrangler.toml` 的 `[[routes]]`）。**同一个主机名不能既是 R2 自定义域又是 Worker 自定义域**——如果该域名此前已在 R2 设置里绑给某个桶，`wrangler deploy` 会失败，需要先去 R2 解绑。
 
+### 自动发布（GitHub Actions）
+
+推到 `master` 就会自动构建并发布镜像，**不需要在本地 `docker login`**：
+
+| 流水线 | 触发 | 做什么 |
+|---|---|---|
+| `.github/workflows/docker.yml` | 改动主应用后推送 | `tsc -b` + 全量单测（当前 21 文件 / 999 用例）→ 多阶段构建 → 推 Docker Hub |
+| `.github/workflows/worker.yml` | 只改 `mopai-worker/**` 时 | `tsc --noEmit` → `wrangler deploy` 图床 Worker |
+
+`docker.yml` 的 `verify` 是**闸门**：类型检查或测试不过，就不会有任何镜像被推上去。所以 Docker Hub 上的 `latest` 永远对得上一个全绿的提交，不会出现「镜像比代码新」。
+
+每次构建推**三个 tag，指向同一份镜像**：
+
+- `latest` —— 滚动指向最新
+- `YYYY-MM-DD` —— 当天日期，按**东八区**取（runner 是 UTC，不改时区的话早上八点前推会算成前一天）；同一天推第二次会覆盖
+- `sha-<7位>` —— 每次提交唯一（如 `sha-5f1de17`），可精确追溯、可用来绕过 registry 缓存
+
+三个 Secret 需要先在仓库里配好（Settings → Secrets and variables → Actions）：
+
+| Secret | 值 |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
+| `DOCKERHUB_TOKEN` | Docker Hub 的 **Access Token**（Account settings → Personal access tokens，权限 Read & Write），不是登录密码 |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare token，权限只要两条：Account → Workers Scripts **Edit**、Zone → Workers Routes **Edit**。`wrangler.toml` 里 `account_id` 是写死的，所以**不需要** Account Settings / Zone 那类账户级读权限（实测两条就够） |
+
+缺 Secret 时流水线会失败并直接说明缺哪一个（`worker.yml` 有一个显式的守卫步骤），不会跑到一半给你一个看不懂的错。
+
+推送凭证都落在 GitHub 上，所以 Worker 的 `IMG_ADMIN_KEY` 不必进 CI：它是**运行时**变量，早先 `wrangler secret put` 设过之后就一直留在 Cloudflare 侧，重新部署既不会覆盖也不会清掉。
+
 ### 更新
 
+**部署主机（NAS）**——两条命令，`pull` 不能省：
+
 ```bash
-git pull
-docker compose pull              # 拿到新镜像
+docker compose pull
 docker compose up -d             # 只重建 app；数据在 volume 里不受影响
                                  # 隧道已经在跑就加上 --profile tunnel
 ```
 
-有源码的机器上发布新版本：
+`pull` 之所以是单独一步：compose 只在被明确要求时才去 registry 查，光敲 `up -d` 会安安静静复用本地那个旧的 `latest`，现象就是「更新了但没变化」。
+
+**有源码的机器**——不用手动构建，`git push` 之后等 Actions 跑完就行：
 
 ```bash
-docker build -t suxinljh/mopai:latest -t suxinljh/mopai:$(date +%F) .
-docker push suxinljh/mopai:latest
-docker push suxinljh/mopai:$(date +%F)
+gh run watch -R Suxinljh/mopai            # 盯着当前这一次
+gh run rerun <run-id> -R Suxinljh/mopai   # 想重跑某一次
+gh workflow run docker -R Suxinljh/mopai  # 不改代码也想触发
 ```
+
+要手动构建发布也可以（会覆盖 CI 推的 `latest`）：
+
+```bash
+docker build -t suxinljh/mopai:latest -t suxinljh/mopai:$(TZ=Asia/Shanghai date +%F) .
+docker push suxinljh/mopai:latest
+docker push suxinljh/mopai:$(TZ=Asia/Shanghai date +%F)
+```
+
+### 更新了但没变化？
+
+先看 compose 实际解析出什么、容器实际用的是什么：
+
+```bash
+docker compose config | grep -E 'image:|pull_policy|build:'
+docker images --digests | grep -i mopai
+docker inspect mopai-app --format '{{.Config.Image}}  {{.Image}}'
+```
+
+最常见的两个原因：
+
+- **只 `up -d`，没 `pull`**：容器被重建了，内容一个字节没变。这是最常见的一种，现象完全就是「识别不到更新」。
+- **registry 镜像站缓存了可变 tag**：国内 NAS 常在 `/etc/docker/daemon.json` 里配加速器，而 `latest` 和日期 tag 都是**可变**的，镜像站可能长时间返回旧内容。`sha-<7位>` 是每次提交的新名字，缓存里没有，所以卡住时最快的解法是直接把 `image:` 换成 `suxinljh/mopai:sha-<实际短sha>`，拉起来确认无误后再决定要不要切回 `latest`。
+
+顺带一个判据：`docker images --digests` 里如果 DIGEST 那列是 `<none>`，说明这个 tag 是本地 `docker load` 导入的、根本没经过 registry —— 那么无论 `pull` 多少次都不会变，得重新导入或改成从 Hub 拉。
 
 ### 上游原来的 VPS 方案（已移除）
 
